@@ -62,7 +62,7 @@ static string ConvertPostgresConnectionString(string? databaseUrl)
         throw new ArgumentNullException(nameof(databaseUrl), "Database connection string is not configured.");
     }
 
-    if (!databaseUrl.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase))
+    if (!databaseUrl.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
     {
         return databaseUrl;
     }
