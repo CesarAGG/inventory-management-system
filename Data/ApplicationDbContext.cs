@@ -32,5 +32,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .WithOne(cf => cf.Inventory)
             .HasForeignKey(cf => cf.InventoryId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<CustomField>()
+            .HasIndex(cf => new { cf.InventoryId, cf.TargetColumn })
+            .IsUnique();
     }
 }

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using System;
 using System.Threading.Tasks;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,7 +39,12 @@ builder.Services.AddAuthentication()
         options.ClientSecret = builder.Configuration["Microsoft:ClientSecret"]!;
     });
 
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+    });
+
 builder.Services.AddRazorPages();
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>

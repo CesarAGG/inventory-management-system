@@ -23,6 +23,10 @@ public class CustomField
     [Required]
     public string InventoryId { get; set; } = string.Empty;
 
+    [Required]
+    [StringLength(50)]
+    public string TargetColumn { get; set; } = string.Empty;
+
     [ForeignKey("InventoryId")]
     public virtual Inventory? Inventory { get; set; }
 }
