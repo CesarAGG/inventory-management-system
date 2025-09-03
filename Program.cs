@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using System;
+using System.Threading.Tasks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,6 +15,18 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddDefaultIdentity<ApplicationUser>(options => options.SignIn.RequireConfirmedAccount = false)
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>();
+
+builder.Services.AddAuthentication()
+    .AddGoogle(options =>
+    {
+        options.ClientId = builder.Configuration["Google:ClientId"]!;
+        options.ClientSecret = builder.Configuration["Google:ClientSecret"]!;
+    })
+    .AddMicrosoftAccount(options =>
+    {
+        options.ClientId = builder.Configuration["Microsoft:ClientId"]!;
+        options.ClientSecret = builder.Configuration["Microsoft:ClientSecret"]!;
+    });
 
 builder.Services.AddControllersWithViews();
 
@@ -46,22 +60,28 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}");
 app.MapRazorPages();
 
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    try
-    {
-        var context = services.GetRequiredService<ApplicationDbContext>();
-        context.Database.Migrate();
-    }
-    catch (Exception ex)
-    {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred while migrating the database.");
-    }
-}
+await SeedDatabaseAsync(app);
 
 app.Run();
+
+static async Task SeedDatabaseAsync(IHost app)
+{
+    using (var scope = app.Services.CreateScope())
+    {
+        var services = scope.ServiceProvider;
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        try
+        {
+            var context = services.GetRequiredService<ApplicationDbContext>();
+            await context.Database.MigrateAsync();
+            await DbSeeder.SeedRolesAndAdminAsync(services);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "An error occurred while migrating or seeding the database.");
+        }
+    }
+}
 
 static string ConvertPostgresConnectionString(string? databaseUrl)
 {
