@@ -1,0 +1,68 @@
+﻿@model IEnumerable<InventoryManagementSystem.Data.ApplicationUser>
+
+@{
+    ViewData["Title"] = "Admin - User Management";
+}
+
+<h2>User Management</h2>
+
+<form id="userManagementForm" method="post">
+    <div class="card">
+        <div class="card-header bg-light">
+            <div class="d-flex align-items-center">
+                <h5 class="mb-0">Actions Toolbar</h5>
+                <div class="ms-auto">
+                    <button type="submit" class="btn btn-danger" formaction="@Url.Action("BlockUsers")">Block</button>
+                    <button type="submit" class="btn btn-success" formaction="@Url.Action("UnblockUsers")">Unblock</button>
+                    <button type="submit" class="btn btn-primary" formaction="@Url.Action("AssignAdminRole")">Add to Admin</button>
+                    <button type="submit" class="btn btn-warning" formaction="@Url.Action("RemoveAdminRole")">Remove from Admin</button>
+                    <button type="submit" class="btn btn-dark" formaction="@Url.Action("DeleteUsers")">Delete</button>
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 50px;">
+                            <input class="form-check-input" type="checkbox" id="selectAllCheckbox" />
+                        </th>
+                        <th>Email</th>
+                        <th>Status</th>
+                        <th>Role</th>
+                        <th>Last Login</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var user in Model)
+                    {
+                        <tr>
+                            <td>
+                                <input class="form-check-input user-checkbox" type="checkbox" name="selectedUserIds" value="@user.Id" />
+                            </td>
+                            <td>@user.Email</td>
+                            <td>@(user.IsBlocked ? "Blocked" : "Active")</td>
+                            <td><!-- Role display logic will be added here --></td>
+                            <td><!-- Last login logic will be added later --></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+        const userCheckboxes = document.querySelectorAll('.user-checkbox');
+
+        selectAllCheckbox.addEventListener('change', function () {
+            userCheckboxes.forEach(checkbox => {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+        });
+    });
+</script>
+}
