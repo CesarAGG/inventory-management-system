@@ -95,11 +95,16 @@ public class AdminController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    private async Task UpdateUserBlockStatus(string[] userIds, bool isBlocked)
+    private async Task<List<ApplicationUser>> GetUsersByIdsAsync(string[] userIds)
     {
-        var usersToUpdate = await _userManager.Users
+        return await _userManager.Users
             .Where(u => userIds.Contains(u.Id))
             .ToListAsync();
+    }
+
+    private async Task UpdateUserBlockStatus(string[] userIds, bool isBlocked)
+    {
+        var usersToUpdate = await GetUsersByIdsAsync(userIds);
 
         foreach (var user in usersToUpdate)
         {
@@ -113,9 +118,7 @@ public class AdminController : Controller
     private async Task UpdateUserAdminRole(string[] userIds, bool assignAdmin)
     {
         const string adminRoleName = "Admin";
-        var usersToUpdate = await _userManager.Users
-            .Where(u => userIds.Contains(u.Id))
-            .ToListAsync();
+        var usersToUpdate = await GetUsersByIdsAsync(userIds);
 
         var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 

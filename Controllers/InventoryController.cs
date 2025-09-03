@@ -47,9 +47,6 @@ public class InventoryController : Controller
                 OwnerId = userId
             };
 
-            inventory.CustomFields.Add(new CustomField { Name = "Title", Type = CustomFieldType.String });
-            inventory.CustomFields.Add(new CustomField { Name = "Description", Type = CustomFieldType.Text });
-
             _context.Add(inventory);
             await _context.SaveChangesAsync();
             return RedirectToAction("Index", "Home");
