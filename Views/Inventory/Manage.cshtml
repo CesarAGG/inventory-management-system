@@ -35,6 +35,7 @@
                             <h5>Current Fields</h5>
                             <p class="text-muted small">Drag and drop rows to reorder.</p>
                             <form id="fieldsForm">
+                                @Html.AntiForgeryToken()
                                 <input type="hidden" name="inventoryId" value="@Model.Id" />
                                 <ul id="fields-list" class="list-group">
                                     <!-- Field items will be dynamically loaded here -->
@@ -71,6 +72,24 @@
     </div>
 </div>
 
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="deleteConfirmModalLabel">Confirm Deletion</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete this custom field? This action cannot be undone.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 <script>
@@ -80,15 +99,103 @@
         const addFieldBtn = document.getElementById('addFieldBtn');
         const newFieldNameInput = document.getElementById('newFieldName');
         const newFieldTypeSelect = document.getElementById('newFieldType');
+        const csrfToken = document.querySelector('input[name="__RequestVerificationToken"]').value;
 
-        new Sortable(fieldsList, {
-            animation: 150,
-            handle: '.drag-handle',
-            onEnd: function () {
-                console.log('Order changed!');
+        const deleteModalElement = document.getElementById('deleteConfirmModal');
+        const deleteModal = new bootstrap.Modal(deleteModalElement);
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        let fieldToDeleteId = null;
+
+        // --- Notification Function ---
+        function showToast(message, isError = false) {
+            const toastContainer = document.querySelector('.toast-container');
+            const toastId = 'toast-' + Math.random().toString(36).substr(2, 9);
+            const toastHtml = `
+            <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header ${isError ? 'bg-danger text-white' : 'bg-success text-white'}">
+                    <strong class="me-auto">${isError ? 'Error' : 'Success'}</strong>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+                <div class="toast-body">
+                    ${escapeHtml(message)}
+                </div>
+            </div>`;
+            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+
+            const toastElement = document.getElementById(toastId);
+            const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+            toast.show();
+            toastElement.addEventListener('hidden.bs.toast', () => toastElement.remove());
+        }
+
+        // --- API Functions ---
+        async function fetchFields() {
+            const response = await fetch(`/api/inventory/${inventoryId}/fields`);
+            if (!response.ok) {
+                showToast('Failed to load fields.', true);
+                return;
             }
-        });
+            const fields = await response.json();
+            renderFields(fields);
+        }
 
+        async function addField() {
+            const name = newFieldNameInput.value.trim();
+            const type = newFieldTypeSelect.value;
+            if (!name) {
+                showToast('Field name cannot be empty.', true);
+                return;
+            }
+
+            const response = await fetch(`/api/inventory/${inventoryId}/fields`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
+                body: JSON.stringify({ name: name, type: type })
+            });
+
+            if (response.ok) {
+                newFieldNameInput.value = '';
+                showToast('Field added successfully.');
+                fetchFields();
+            } else {
+                showToast('Failed to add field.', true);
+            }
+        }
+
+        async function deleteField() {
+            if (!fieldToDeleteId) return;
+
+            const response = await fetch(`/api/inventory/fields/${fieldToDeleteId}`, {
+                method: 'DELETE',
+                headers: { 'RequestVerificationToken': csrfToken }
+            });
+
+            if (response.ok) {
+                showToast('Field deleted successfully.');
+                fetchFields(); // Refresh the list
+            } else {
+                showToast('Failed to delete field.', true);
+            }
+
+            deleteModal.hide();
+            fieldToDeleteId = null;
+        }
+
+        async function reorderFields(orderedIds) {
+            const response = await fetch(`/api/inventory/${inventoryId}/fields/reorder`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
+                body: JSON.stringify(orderedIds)
+            });
+
+            if (response.ok) {
+                showToast('Order saved.');
+            } else {
+                showToast('Failed to save new order. Please refresh.', true);
+            }
+        }
+
+        // --- UI Rendering and Event Handlers ---
         function renderFields(fields) {
             fieldsList.innerHTML = '';
             fields.forEach(field => {
@@ -97,13 +204,13 @@
                 listItem.dataset.id = field.id;
 
                 listItem.innerHTML = `
-                <span class="drag-handle" style="cursor: move; margin-right: 15px;">&#9776;</span>
-                <div class="flex-grow-1">
-                    <strong>${escapeHtml(field.name)}</strong>
-                    <small class="text-muted d-block">${escapeHtml(field.type)}</small>
-                </div>
-                <button type="button" class="btn btn-sm btn-danger delete-field-btn">Delete</button>
-            `;
+        <span class="drag-handle" style="cursor: move; margin-right: 15px;">&#9776;</span>
+        <div class="flex-grow-1">
+            <strong>${escapeHtml(field.name)}</strong>
+            <small class="text-muted d-block">${escapeHtml(field.type)}</small>
+        </div>
+        <button type="button" class="btn btn-sm btn-danger delete-field-btn" data-field-id="${field.id}">Delete</button>
+    `;
                 fieldsList.appendChild(listItem);
             });
         }
@@ -117,12 +224,30 @@
                 .replace(/'/g, "&#039;");
         }
 
-        // Using dummy data for this first step. Will be replaced by API calls.
-        const dummyFields = [
-            { id: '1', name: 'Title', type: 'String' },
-            { id: '2', name: 'Description', type: 'Text' }
-        ];
-        renderFields(dummyFields);
+        // Initialize SortableJS
+        new Sortable(fieldsList, {
+            animation: 150,
+            handle: '.drag-handle',
+            onEnd: function () {
+                const allItems = fieldsList.querySelectorAll('li[data-id]');
+                const orderedIds = Array.from(allItems).map(item => item.dataset.id);
+                reorderFields(orderedIds);
+            }
+        });
+
+        addFieldBtn.addEventListener('click', addField);
+
+        fieldsList.addEventListener('click', function (e) {
+            if (e.target && e.target.classList.contains('delete-field-btn')) {
+                fieldToDeleteId = e.target.dataset.fieldId;
+                deleteModal.show();
+            }
+        });
+
+        confirmDeleteBtn.addEventListener('click', deleteField);
+
+        // Initial load
+        fetchFields();
     });
 </script>
 }

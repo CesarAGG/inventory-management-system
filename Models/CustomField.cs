@@ -18,6 +18,8 @@ public class CustomField
     [Required]
     public CustomFieldType Type { get; set; }
 
+    public int Order { get; set; } = 0;
+
     [Required]
     public string InventoryId { get; set; } = string.Empty;
 
