@@ -1,0 +1,128 @@
+﻿@model InventoryManagementSystem.Models.Inventory
+
+@{
+    ViewData["Title"] = "Manage Inventory: " + Model.Name;
+}
+
+<h2>@ViewData["Title"]</h2>
+
+<div>
+    <a asp-action="Index" asp-controller="Home">Back to Home</a>
+</div>
+<hr />
+
+<div class="row">
+    <div class="col-md-12">
+        <ul class="nav nav-tabs" id="inventoryTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="items-tab" data-bs-toggle="tab" data-bs-target="#items-tab-pane" type="button" role="tab">Items</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="fields-tab" data-bs-toggle="tab" data-bs-target="#fields-tab-pane" type="button" role="tab">Fields</button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="inventoryTabsContent">
+            <div class="tab-pane fade" id="items-tab-pane" role="tabpanel" tabindex="0">
+                <div class="card card-body mt-3">
+                    <p>Item management UI will be here in a future step.</p>
+                </div>
+            </div>
+            <div class="tab-pane fade show active" id="fields-tab-pane" role="tabpanel" tabindex="0">
+                <div class="card card-body mt-3">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5>Current Fields</h5>
+                            <p class="text-muted small">Drag and drop rows to reorder.</p>
+                            <form id="fieldsForm">
+                                <input type="hidden" name="inventoryId" value="@Model.Id" />
+                                <ul id="fields-list" class="list-group">
+                                    <!-- Field items will be dynamically loaded here -->
+                                </ul>
+                            </form>
+                        </div>
+                        <div class="col-md-4">
+                            <h5>Add New Field</h5>
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="form-group mb-3">
+                                        <label for="newFieldName" class="form-label">Field Name</label>
+                                        <input type="text" id="newFieldName" class="form-control" />
+                                    </div>
+                                    <div class="form-group mb-3">
+                                        <label for="newFieldType" class="form-label">Field Type</label>
+                                        <select id="newFieldType" class="form-select">
+                                            <option value="String">Single-line text</option>
+                                            <option value="Text">Multi-line text</option>
+                                            <option value="Int">Number</option>
+                                            <option value="Bool">Checkbox (Yes/No)</option>
+                                            <option value="DateTime">Date</option>
+                                            <option value="FileUrl">Document/Image URL</option> <!-- Correctly added -->
+                                        </select>
+                                    </div>
+                                    <button type="button" id="addFieldBtn" class="btn btn-primary w-100">Add Field</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const inventoryId = document.querySelector('input[name="inventoryId"]').value;
+        const fieldsList = document.getElementById('fields-list');
+        const addFieldBtn = document.getElementById('addFieldBtn');
+        const newFieldNameInput = document.getElementById('newFieldName');
+        const newFieldTypeSelect = document.getElementById('newFieldType');
+
+        new Sortable(fieldsList, {
+            animation: 150,
+            handle: '.drag-handle',
+            onEnd: function () {
+                console.log('Order changed!');
+            }
+        });
+
+        function renderFields(fields) {
+            fieldsList.innerHTML = '';
+            fields.forEach(field => {
+                const listItem = document.createElement('li');
+                listItem.className = 'list-group-item d-flex align-items-center';
+                listItem.dataset.id = field.id;
+
+                listItem.innerHTML = `
+                <span class="drag-handle" style="cursor: move; margin-right: 15px;">&#9776;</span>
+                <div class="flex-grow-1">
+                    <strong>${escapeHtml(field.name)}</strong>
+                    <small class="text-muted d-block">${escapeHtml(field.type)}</small>
+                </div>
+                <button type="button" class="btn btn-sm btn-danger delete-field-btn">Delete</button>
+            `;
+                fieldsList.appendChild(listItem);
+            });
+        }
+
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Using dummy data for this first step. Will be replaced by API calls.
+        const dummyFields = [
+            { id: '1', name: 'Title', type: 'String' },
+            { id: '2', name: 'Description', type: 'Text' }
+        ];
+        renderFields(dummyFields);
+    });
+</script>
+}

@@ -3,8 +3,10 @@ using InventoryManagementSystem.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Threading.Tasks;
+using System.Security.Claims;
 
 namespace InventoryManagementSystem.Controllers;
 
@@ -24,6 +26,28 @@ public class InventoryController : Controller
     public IActionResult Create()
     {
         return View();
+    }
+
+    // GET: /Inventory/Manage/{id}
+    [HttpGet]
+    public async Task<IActionResult> Manage(string id)
+    {
+        var inventory = await _context.Inventories
+            .FirstOrDefaultAsync(i => i.Id == id);
+
+        if (inventory == null)
+        {
+            return NotFound();
+        }
+
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (inventory.OwnerId != currentUserId && !User.IsInRole("Admin"))
+        {
+            // If the user is not the owner and not an Admin, deny access.
+            return Forbid();
+        }
+
+        return View(inventory);
     }
 
     // POST: /Inventory/Create

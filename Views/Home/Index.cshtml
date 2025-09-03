@@ -21,7 +21,9 @@
             @foreach (var inventory in Model)
             {
                 <tr>
-                    <td>@inventory.Name</td>
+                    <td>
+                        <a asp-action="Manage" asp-controller="Inventory" asp-route-id="@inventory.Id">@inventory.Name</a>
+                    </td>
                     <td>@(inventory.Owner?.Email ?? "N/A")</td>
                     <td>@inventory.CreatedAt.ToString("g")</td>
                 </tr>
