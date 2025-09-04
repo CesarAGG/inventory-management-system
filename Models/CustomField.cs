@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace InventoryManagementSystem.Models;
 
-public enum CustomFieldType { String, Text, Int, Bool, DateTime, FileUrl }
+public enum CustomFieldType { String, Text, Numeric, Bool, FileUrl }
 
 public class CustomField
 {

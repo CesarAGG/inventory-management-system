@@ -9,6 +9,8 @@ public class Item
     [Key]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
     public string? CustomString1 { get; set; }
     public string? CustomString2 { get; set; }
     public string? CustomString3 { get; set; }
@@ -17,17 +19,13 @@ public class Item
     public string? CustomText2 { get; set; }
     public string? CustomText3 { get; set; }
 
-    public int? CustomInt1 { get; set; }
-    public int? CustomInt2 { get; set; }
-    public int? CustomInt3 { get; set; }
+    public decimal? CustomNumeric1 { get; set; }
+    public decimal? CustomNumeric2 { get; set; }
+    public decimal? CustomNumeric3 { get; set; }
 
     public bool? CustomBool1 { get; set; }
     public bool? CustomBool2 { get; set; }
     public bool? CustomBool3 { get; set; }
-
-    public DateTime? CustomDateTime1 { get; set; }
-    public DateTime? CustomDateTime2 { get; set; }
-    public DateTime? CustomDateTime3 { get; set; }
 
     public string? CustomFileUrl1 { get; set; }
     public string? CustomFileUrl2 { get; set; }

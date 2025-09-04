@@ -333,13 +333,16 @@ public class InventoryController : Controller
                     {
                         var valueStr = value.ToString();
                         object? convertedValue;
-                        if (propInfo.PropertyType == typeof(bool?))
+
+                        var targetType = Nullable.GetUnderlyingType(propInfo.PropertyType) ?? propInfo.PropertyType;
+
+                        if (targetType == typeof(bool))
                         {
                             convertedValue = valueStr != null && (valueStr.Equals("true", StringComparison.OrdinalIgnoreCase) || valueStr.Equals("on", StringComparison.OrdinalIgnoreCase));
                         }
                         else
                         {
-                            convertedValue = Convert.ChangeType(valueStr, Nullable.GetUnderlyingType(propInfo.PropertyType) ?? propInfo.PropertyType);
+                            convertedValue = Convert.ChangeType(valueStr, targetType, System.Globalization.CultureInfo.InvariantCulture);
                         }
                         propInfo.SetValue(newItem, convertedValue);
                     }
