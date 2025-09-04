@@ -24,6 +24,7 @@ public class CustomFieldDto
 public class ItemDto
 {
     public string Id { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     // Key is TargetColumn (e.g., "CustomString1"), Value is the data
     public Dictionary<string, object?> Fields { get; set; } = new();
 }
@@ -224,27 +225,39 @@ public class InventoryController : Controller
         return CreatedAtAction(nameof(GetCustomFields), new { inventoryId }, resultDto);
     }
 
-    [HttpDelete]
-    [Route("api/inventory/fields/{fieldId}")]
+    [HttpPost]
+    [Route("api/inventory/fields/delete")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteCustomField(string fieldId)
+    public async Task<IActionResult> DeleteCustomFields([FromBody] string[] fieldIds)
     {
-        var field = await _context.CustomFields.Include(cf => cf.Inventory)
-            .FirstOrDefaultAsync(cf => cf.Id == fieldId);
+        if (fieldIds == null || !fieldIds.Any())
+        {
+            return BadRequest("No field IDs provided.");
+        }
 
-        if (field == null) return NotFound();
+        var fieldsToDelete = await _context.CustomFields
+            .Where(cf => fieldIds.Contains(cf.Id))
+            .Include(cf => cf.Inventory)
+            .ToListAsync();
 
-        // Authorization check
+        if (!fieldsToDelete.Any()) return Ok(); 
+
         var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (field.Inventory?.OwnerId != currentUserId && !User.IsInRole("Admin"))
+        var inventories = fieldsToDelete.Select(f => f.Inventory).Distinct();
+        if (inventories.Any(inv => inv?.OwnerId != currentUserId && !User.IsInRole("Admin")))
         {
             return Forbid();
         }
 
-        _context.CustomFields.Remove(field);
+        if (fieldsToDelete.Select(f => f.InventoryId).Distinct().Count() > 1)
+        {
+            return BadRequest("Cannot delete fields from multiple inventories in a single request.");
+        }
+
+        _context.CustomFields.RemoveRange(fieldsToDelete);
         await _context.SaveChangesAsync();
 
-        return NoContent(); // Success, no content to return
+        return Ok();
     }
 
     [HttpPut]
@@ -299,10 +312,18 @@ public class InventoryController : Controller
         }
 
         var fields = await _context.CustomFields
-            .Where(cf => cf.InventoryId == inventoryId)
-            .OrderBy(cf => cf.Order)
-            .AsNoTracking()
-            .ToListAsync();
+        .Where(cf => cf.InventoryId == inventoryId)
+        .OrderBy(cf => cf.Order)
+        .AsNoTracking()
+        .Select(f => new // Project into an anonymous object or a DTO
+        {
+            f.Id,
+            f.Name,
+            f.Order,
+            f.TargetColumn,
+            Type = f.Type.ToString() // This is the critical fix
+        })
+        .ToListAsync();
 
         var items = await _context.Items
             .Where(i => i.InventoryId == inventoryId)
@@ -312,6 +333,7 @@ public class InventoryController : Controller
         var itemDtos = items.Select(item => new ItemDto
         {
             Id = item.Id,
+            CreatedAt = item.CreatedAt,
             Fields = fields.ToDictionary(
                 field => field.TargetColumn,
                 field => typeof(Item).GetProperty(field.TargetColumn)?.GetValue(item)
@@ -377,6 +399,7 @@ public class InventoryController : Controller
         var createdItemDto = new ItemDto
         {
             Id = newItem.Id,
+            CreatedAt = newItem.CreatedAt,
             Fields = fields.ToDictionary(
                 field => field.TargetColumn,
                 field => typeof(Item).GetProperty(field.TargetColumn)?.GetValue(newItem)
