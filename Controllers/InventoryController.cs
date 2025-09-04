@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using Npgsql;
 
 namespace InventoryManagementSystem.Controllers;
 
@@ -38,11 +39,16 @@ public class InventoryController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ILogger<InventoryController> _logger;
 
-    public InventoryController(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
+    public InventoryController(
+        ApplicationDbContext context,
+        UserManager<ApplicationUser> userManager,
+        ILogger<InventoryController> logger)
     {
         _context = context;
         _userManager = userManager;
+        _logger = logger;
     }
 
     // GET: /Inventory/Create
@@ -194,9 +200,17 @@ public class InventoryController : Controller
         {
             await _context.SaveChangesAsync();
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex)
         {
-            return Conflict("A field with the same properties was created simultaneously. Please try again.");
+            // Check for unique constraint violation (race condition)
+            if (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
+            {
+                return Conflict("A field with the same properties was created simultaneously. Please try again.");
+            }
+
+            // Catch other potential DB errors, like a string being too long
+            _logger.LogError(ex, "Database error while adding custom field for inventory {InventoryId}", inventoryId);
+            return BadRequest("A database error occurred. Please check your input (e.g., field name is not too long).");
         }
 
         // Return the created field (with its new ID) so the UI can update
@@ -251,6 +265,11 @@ public class InventoryController : Controller
         var fieldsToUpdate = await _context.CustomFields
             .Where(cf => cf.InventoryId == inventoryId)
             .ToListAsync();
+
+        if (fieldsToUpdate.Count != orderedFieldIds.Length || fieldsToUpdate.Any(f => !orderedFieldIds.Contains(f.Id)))
+        {
+            return BadRequest("The provided list of field IDs is incomplete or contains invalid IDs for this inventory.");
+        }
 
         for (int i = 0; i < orderedFieldIds.Length; i++)
         {
