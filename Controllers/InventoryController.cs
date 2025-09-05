@@ -1,9 +1,11 @@
 ﻿using InventoryManagementSystem.Data;
 using InventoryManagementSystem.Models;
+using InventoryManagementSystem.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using System;
 using System.Collections.Generic;
@@ -14,6 +16,8 @@ using System.Threading.Tasks;
 using InventoryManagementSystem.Services;
 using InventoryManagementSystem.Models.CustomId;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace InventoryManagementSystem.Controllers;
 
@@ -28,6 +32,7 @@ public class CustomFieldDto
 public class ItemDto
 {
     public string Id { get; set; } = string.Empty;
+    public string CustomId { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     // Key is TargetColumn (e.g., "CustomString1"), Value is the data
     public Dictionary<string, object?> Fields { get; set; } = new();
@@ -275,7 +280,7 @@ public class InventoryController : Controller
             .Include(cf => cf.Inventory)
             .ToListAsync();
 
-        if (!fieldsToDelete.Any()) return Ok(); 
+        if (!fieldsToDelete.Any()) return Ok();
 
         var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var inventories = fieldsToDelete.Select(f => f.Inventory).Distinct();
@@ -382,6 +387,7 @@ public class InventoryController : Controller
         var itemDtos = items.Select(item => new ItemDto
         {
             Id = item.Id,
+            CustomId = item.CustomId,
             CreatedAt = item.CreatedAt,
             Fields = fields.ToDictionary(
                 field => field.TargetColumn,
@@ -464,10 +470,11 @@ public class InventoryController : Controller
         // Generate Custom ID if format is defined
         if (!string.IsNullOrWhiteSpace(inventory.CustomIdFormat))
         {
-            var segments = JsonSerializer.Deserialize<List<IdSegment>>(inventory.CustomIdFormat);
+            var segments = JsonIdSegmentDeserializer.Deserialize(inventory.CustomIdFormat);
             if (segments != null && segments.Any())
             {
                 newItem.CustomId = _customIdService.GenerateId(inventory, segments);
+                newItem.CustomIdFormatHashApplied = inventory.CustomIdFormatHash;
             }
         }
 
@@ -481,13 +488,22 @@ public class InventoryController : Controller
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
+                _context.Entry(newItem).State = EntityState.Detached;
+                var savedItem = await _context.Items.FindAsync(newItem.Id);
+
+                if (savedItem == null)
+                {
+                    return StatusCode(500, "Failed to retrieve the saved item.");
+                }
+
                 var createdItemDto = new ItemDto
                 {
-                    Id = newItem.Id,
-                    CreatedAt = newItem.CreatedAt,
+                    Id = savedItem.Id,
+                    CustomId = savedItem.CustomId,
+                    CreatedAt = savedItem.CreatedAt,
                     Fields = fields.ToDictionary(
                         field => field.TargetColumn,
-                        field => typeof(Item).GetProperty(field.TargetColumn)?.GetValue(newItem)
+                        field => typeof(Item).GetProperty(field.TargetColumn)?.GetValue(savedItem)
                     )
                 };
                 return CreatedAtAction(nameof(GetItemsData), new { inventoryId }, createdItemDto);
@@ -562,66 +578,102 @@ public class InventoryController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateItem(string itemId, [FromBody] ItemApiRequest request)
     {
-        var itemToUpdate = await _context.Items
-            .Include(i => i.Inventory)
-            .FirstOrDefaultAsync(i => i.Id == itemId);
-
-        if (itemToUpdate == null) return NotFound();
-
-        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (itemToUpdate.Inventory?.OwnerId != currentUserId && !User.IsInRole("Admin"))
+        const int maxRetries = 3;
+        for (int i = 0; i < maxRetries; i++)
         {
-            return Forbid();
-        }
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
-        var fields = await _context.CustomFields
-            .Where(cf => cf.InventoryId == itemToUpdate.InventoryId)
-            .ToListAsync();
+            var itemToUpdate = await _context.Items
+                .Include(it => it.Inventory)
+                .FirstOrDefaultAsync(it => it.Id == itemId);
 
-        var validationErrors = new Dictionary<string, string>();
+            if (itemToUpdate == null) return NotFound();
 
-        foreach (var field in fields)
-        {
-            if (request.FieldValues.TryGetValue(field.Id, out var value))
+            var inventory = await _context.Inventories
+                .FromSql($"SELECT * FROM \"Inventories\" WHERE \"Id\" = {itemToUpdate.InventoryId} FOR UPDATE")
+                .FirstAsync();
+            itemToUpdate.Inventory = inventory;
+
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (itemToUpdate.Inventory?.OwnerId != currentUserId && !User.IsInRole("Admin"))
             {
-                var propInfo = typeof(Item).GetProperty(field.TargetColumn);
-                if (propInfo != null)
-                {
-                    try
-                    {
-                        var valueStr = value?.ToString();
-                        object? convertedValue;
-                        var targetType = Nullable.GetUnderlyingType(propInfo.PropertyType) ?? propInfo.PropertyType;
+                return Forbid();
+            }
 
-                        if (string.IsNullOrEmpty(valueStr))
-                        {
-                            convertedValue = null;
-                        }
-                        else if (targetType == typeof(bool))
-                        {
-                            convertedValue = valueStr.Equals("true", StringComparison.OrdinalIgnoreCase) || valueStr.Equals("on", StringComparison.OrdinalIgnoreCase);
-                        }
-                        else
-                        {
-                            convertedValue = Convert.ChangeType(valueStr, targetType, CultureInfo.InvariantCulture);
-                        }
-                        propInfo.SetValue(itemToUpdate, convertedValue);
-                    }
-                    catch (Exception)
+            var fields = await _context.CustomFields
+                .Where(cf => cf.InventoryId == itemToUpdate.InventoryId)
+                .AsNoTracking()
+                .ToListAsync();
+
+            var validationErrors = new Dictionary<string, string>();
+
+            foreach (var field in fields)
+            {
+                if (request.FieldValues.TryGetValue(field.Id, out var value))
+                {
+                    var propInfo = typeof(Item).GetProperty(field.TargetColumn);
+                    if (propInfo != null)
                     {
-                        validationErrors.Add(field.Id, $"Invalid data format for field '{field.Name}'.");
+                        try
+                        {
+                            var valueStr = value?.ToString();
+                            object? convertedValue;
+                            var targetType = Nullable.GetUnderlyingType(propInfo.PropertyType) ?? propInfo.PropertyType;
+                            if (string.IsNullOrEmpty(valueStr)) { convertedValue = null; }
+                            else if (targetType == typeof(bool)) { convertedValue = valueStr.Equals("true", StringComparison.OrdinalIgnoreCase) || valueStr.Equals("on", StringComparison.OrdinalIgnoreCase); }
+                            else { convertedValue = Convert.ChangeType(valueStr, targetType, CultureInfo.InvariantCulture); }
+                            propInfo.SetValue(itemToUpdate, convertedValue);
+                        }
+                        catch (Exception) { validationErrors.Add(field.Id, $"Invalid data format for field '{field.Name}'."); }
                     }
+                }
+            }
+
+            if (validationErrors.Any()) { return BadRequest(validationErrors); }
+
+            if (itemToUpdate.Inventory != null && !string.IsNullOrWhiteSpace(itemToUpdate.Inventory.CustomIdFormat))
+            {
+                bool needsNewId = string.IsNullOrEmpty(itemToUpdate.CustomId) ||
+                                  itemToUpdate.CustomIdFormatHashApplied != itemToUpdate.Inventory.CustomIdFormatHash;
+                if (needsNewId)
+                {
+                    var segments = JsonIdSegmentDeserializer.Deserialize(itemToUpdate.Inventory.CustomIdFormat);
+                    if (segments.Any())
+                    {
+                        itemToUpdate.CustomId = _customIdService.GenerateId(itemToUpdate.Inventory, segments);
+                        itemToUpdate.CustomIdFormatHashApplied = itemToUpdate.Inventory.CustomIdFormatHash;
+                    }
+                }
+            }
+            else
+            {
+                itemToUpdate.CustomId = string.Empty;
+                itemToUpdate.CustomIdFormatHashApplied = null;
+            }
+
+            try
+            {
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return Ok(); // On success, exit the loop and method.
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
+            {
+                await transaction.RollbackAsync();
+                _logger.LogWarning(ex, "Unique constraint violation on CustomId during UPDATE. Retry {RetryCount}/{MaxRetries}", i + 1, maxRetries);
+
+                // Detach the failed entities to avoid tracking conflicts on the next loop iteration.
+                _context.Entry(itemToUpdate).State = EntityState.Detached;
+                _context.Entry(inventory).State = EntityState.Detached;
+
+                if (i == maxRetries - 1)
+                {
+                    return Conflict("Failed to generate a unique item ID after multiple attempts. The inventory may be experiencing high traffic. Please try again.");
                 }
             }
         }
 
-        if (validationErrors.Any())
-        {
-            return BadRequest(validationErrors);
-        }
-
-        await _context.SaveChangesAsync();
-        return Ok();
+        return StatusCode(500, "An unexpected error occurred while updating the item.");
     }
 
     [HttpPost]
@@ -662,7 +714,28 @@ public class InventoryController : Controller
             return Forbid();
         }
 
-        return Content(inventory.CustomIdFormat ?? "[]", "application/json");
+        if (string.IsNullOrWhiteSpace(inventory.CustomIdFormat))
+        {
+            return Content("[]", "application/json");
+        }
+
+        try
+        {
+            var segments = JsonIdSegmentDeserializer.Deserialize(inventory.CustomIdFormat);
+
+            var options = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            };
+            var jsonString = JsonSerializer.Serialize((IEnumerable<object>)segments, options);
+
+            return Content(jsonString, "application/json");
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse stored CustomIdFormat for inventory {InventoryId}", inventoryId);
+            return StatusCode(500, "The stored ID format is corrupted.");
+        }
     }
 
     [HttpPut]
@@ -679,12 +752,30 @@ public class InventoryController : Controller
             return Forbid();
         }
 
-        inventory.CustomIdFormat = format.ToString();
-        // Reset sequence counter if user clears the format or removes the sequence segment
-        var segments = JsonSerializer.Deserialize<List<IdSegment>>(inventory.CustomIdFormat);
-        if (segments == null || !segments.OfType<SequenceSegment>().Any())
+        var jsonString = format.ToString();
+        try
         {
-            inventory.LastSequenceValue = 0;
+            var segments = JsonIdSegmentDeserializer.Deserialize(jsonString);
+
+            if (segments.Any())
+            {
+                var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+                var canonicalFormatString = JsonSerializer.Serialize((IEnumerable<object>)segments, options);
+                inventory.CustomIdFormat = canonicalFormatString;
+                inventory.CustomIdFormatHash = HashingHelper.ComputeSha256Hash(canonicalFormatString);
+            }
+            else
+            {
+                // If there are no segments, clear the format and hash.
+                inventory.CustomIdFormat = null;
+                inventory.CustomIdFormatHash = null;
+                inventory.LastSequenceValue = 0;
+            }
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse and save CustomIdFormat for inventory {InventoryId}", inventoryId);
+            return BadRequest("The provided ID format was malformed.");
         }
 
         await _context.SaveChangesAsync();

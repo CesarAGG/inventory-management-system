@@ -24,6 +24,8 @@ public class Inventory
 
     public int LastSequenceValue { get; set; } = 0;
 
+    public string? CustomIdFormatHash { get; set; }
+
     [ForeignKey("OwnerId")]
     public virtual ApplicationUser? Owner { get; set; }
 

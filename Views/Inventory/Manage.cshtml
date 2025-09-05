@@ -20,6 +20,9 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="fields-tab" data-bs-toggle="tab" data-bs-target="#fields-tab-pane" type="button" role="tab" aria-controls="fields-tab-pane" aria-selected="false">Fields</button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="customid-tab" data-bs-toggle="tab" data-bs-target="#customid-tab-pane" type="button" role="tab" aria-controls="customid-tab-pane" aria-selected="false">Custom ID</button>
+            </li>
         </ul>
 
         <div class="tab-content" id="inventoryTabsContent">
@@ -94,6 +97,64 @@
                                     </div>
                                     <button type="button" id="addFieldBtn" class="btn btn-primary w-100">Add Field</button>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Custom ID Tab Pane -->
+            <div class="tab-pane fade" id="customid-tab-pane" role="tabpanel" aria-labelledby="customid-tab" tabindex="0">
+                <div class="card mt-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">ID Format Preview</h5>
+                        <button id="saveIdFormatBtn" type="button" class="btn btn-primary">Save Format</button>
+                    </div>
+                    <div class="card-body bg-light">
+                        <p class="font-monospace fs-5 text-center bg-white p-2 rounded">
+                            <span id="idPreview">No format defined.</span>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-md-8">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h5 class="mb-0">Current Format</h5>
+                            <div>
+                                <button id="editSelectedSegmentBtn" type="button" class="btn btn-outline-secondary" disabled>Edit</button>
+                                <button id="removeSelectedSegmentsBtn" type="button" class="btn btn-danger">Remove Selected</button>
+                                <button id="clearFormatBtn" type="button" class="btn btn-warning">Clear All</button>
+                            </div>
+                        </div>
+                        <p class="text-muted small">Drag segments from the right to build your ID format. Drag to reorder or use the toolbar to manage.</p>
+                        <div id="current-format-list" class="list-group border rounded p-2" style="min-height: 200px;">
+                            <!-- Segments will be rendered here by JS -->
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <h5>Available Segments</h5>
+                        <p class="text-muted small">This is a palette of available components for your ID.</p>
+                        <div id="available-segments-list" class="list-group">
+                            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-segment-type="FixedText">
+                                <div><i class="bi bi-fonts me-2"></i> Fixed Text <small class="text-muted d-block">e.g., "-"</small></div>
+                                <i class="bi bi-question-circle-fill text-muted" data-bs-toggle="popover" data-bs-trigger="hover" title="Fixed Text" data-bs-content="Adds a constant piece of text to the ID."></i>
+                            </div>
+                            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-segment-type="Sequence">
+                                <div><i class="bi bi-sort-numeric-down me-2"></i> Sequence <small class="text-muted d-block">e.g., "0001"</small></div>
+                                <i class="bi bi-question-circle-fill text-muted" data-bs-toggle="popover" data-bs-trigger="hover" title="Sequence" data-bs-content="An auto-incrementing number. The 'padding' determines the total length (e.g., padding 4 makes '1' become '0001')."></i>
+                            </div>
+                            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-segment-type="Date">
+                                <div><i class="bi bi-calendar-date me-2"></i> Date/Time <small class="text-muted d-block">e.g., "2025-09-04"</small></div>
+                                <i class="bi bi-question-circle-fill text-muted" data-bs-toggle="popover" data-bs-trigger="hover" title="Date/Time" data-bs-content="Adds the current date/time, formatted according to standard .NET date format strings (e.g., yyyy-MM-dd)."></i>
+                            </div>
+                            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-segment-type="RandomNumbers">
+                                <div><i class="bi bi-dice-3 me-2"></i> Random Numbers <small class="text-muted d-block">e.g., "7341"</small></div>
+                                <i class="bi bi-question-circle-fill text-muted" data-bs-toggle="popover" data-bs-trigger="hover" title="Random Numbers" data-bs-content="Adds a set of random digits. The 'length' determines how many."></i>
+                            </div>
+                            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-segment-type="Guid">
+                                <div><i class="bi bi-hash me-2"></i> GUID <small class="text-muted d-block">A unique identifier</small></div>
+                                <i class="bi bi-question-circle-fill text-muted" data-bs-toggle="popover" data-bs-trigger="hover" title="GUID" data-bs-content="A Globally Unique Identifier. 'N': 32 digits. 'D': with hyphens. 'B': with braces {}. 'P': with parentheses ()."></i>
                             </div>
                         </div>
                     </div>
@@ -204,6 +265,26 @@
     </div>
 </div>
 
+<!-- Edit Segment Modal -->
+<div class="modal fade" id="editSegmentModal" tabindex="-1" aria-labelledby="editSegmentModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="editSegmentModalLabel">Edit Segment</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editSegmentForm">
+                <input type="hidden" id="segmentId" />
+                <div class="modal-body" id="editSegmentModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 @section Styles {
     <style>
         .expandable-cell .truncated-text {
@@ -234,6 +315,15 @@
             box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25) !important;
             outline: 0 !important;
         }
+
+        #itemModal .form-label {
+            word-break: break-word;
+            white-space: normal;
+        }
+
+        .toast-container {
+            z-index: 1100; 
+        }
     </style>
 }
 
@@ -251,13 +341,13 @@
                 const toastContainer = document.querySelector('.toast-container');
                 const toastId = 'toast-' + Math.random().toString(36).substr(2, 9);
                 const toastHtml = `
-                                        <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
-                                            <div class="toast-header ${isError ? 'bg-danger text-white' : 'bg-success text-white'}">
-                                                <strong class="me-auto">${isError ? 'Error' : 'Success'}</strong>
-                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
-                                            </div>
-                                            <div class="toast-body">${escapeHtml(message)}</div>
-                                        </div>`;
+                                            <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                                                <div class="toast-header ${isError ? 'bg-danger text-white' : 'bg-success text-white'}">
+                                                    <strong class="me-auto">${isError ? 'Error' : 'Success'}</strong>
+                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                                                </div>
+                                                <div class="toast-body">${escapeHtml(message)}</div>
+                                            </div>`;
                 toastContainer.insertAdjacentHTML('beforeend', toastHtml);
                 const toastElement = document.getElementById(toastId);
                 const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
@@ -379,12 +469,12 @@
                     let nameHtml = fieldName;
                     if (fieldName.length > 35) { nameHtml = `<span class="truncated-text" title="${fieldName}">${fieldName.substring(0, 32)}<span class="unselectable">...</span></span>`; }
                     li.innerHTML = `
-                                <input class="form-check-input me-2" type="checkbox" value="${field.id}" name="selectedFieldIds">
-                                <span class="drag-handle" style="cursor: move; margin-right: 10px;">&#9776;</span>
-                                <div class="flex-grow-1" style="min-width: 0;">
-                                    <strong class="d-block text-truncate field-name" data-field-id="${field.id}">${nameHtml}</strong>
-                                    <small class="text-muted d-block">${escapeHtml(field.type)}</small>
-                                </div>`;
+                                    <input class="form-check-input me-2" type="checkbox" value="${field.id}" name="selectedFieldIds">
+                                    <span class="drag-handle" style="cursor: move; margin-right: 10px;">&#9776;</span>
+                                    <div class="flex-grow-1" style="min-width: 0;">
+                                        <strong class="d-block text-truncate field-name" data-field-id="${field.id}">${nameHtml}</strong>
+                                        <small class="text-muted d-block">${escapeHtml(field.type)}</small>
+                                    </div>`;
                     fieldsList.appendChild(li);
                 });
             }
@@ -435,82 +525,50 @@
 
             async function fetchItemsAndSchema() {
                 const response = await fetch(`/api/inventory/${inventoryId}/items-data`);
-                if (!response.ok) { showToast('Failed to load items.', true); return; }
+                if (!response.ok) {
+                    showToast('Failed to load items.', true);
+                    return;
+                }
                 const data = await response.json();
                 itemSchema = data.fields;
+
+                buildItemModalForm(itemSchema);
                 renderItemsUI(itemSchema, data.items);
             }
-            function renderItemsUI(fields, items) {
-                // Render table headers
-                let headersHtml = `<tr><th style="width: 50px;"><input class="form-check-input" type="checkbox" id="selectAllItemsCheckbox" /></th>
-                                       <th style="width: 120px;">Item ID</th>
-                                       <th style="width: 180px;">Created At</th>`;
+
+            function convertItemToRowDataArray(item, fields) {
+                // This object will be passed to the 'Created At' column's render function.
+                const createdAtData = {
+                    display: new Date(item.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
+                    sort: new Date(item.createdAt).getTime()
+                };
+
+                // This object will be passed to the 'Item ID' column's render function.
+                const idCellData = {
+                    id: item.id,
+                    display: item.customId ? (item.customId.length > 12 ? `${item.customId.substring(0, 12)}...` : item.customId) : `${item.id.substring(0, 8)}...`,
+                    full: item.customId || `System ID: ${item.id}`,
+                    isCustom: !!item.customId
+                };
+
+                const rowData = [
+                    idCellData, // Checkbox column will use the ID from this object
+                    idCellData,
+                    createdAtData
+                ];
 
                 fields.forEach(f => {
-                    const fieldName = escapeHtml(f.name);
-                    if (fieldName.length > 35) {
-                        headersHtml += `<th title="${fieldName}">
-                                            <span class="truncated-text">
-                                                ${fieldName.substring(0, 32)}<span class="unselectable">...</span>
-                                            </span>
-                                        </th>`;
-                    } else {
-                        headersHtml += `<th>${fieldName}</th>`;
-                    }
+                    rowData.push(item.fields[f.targetColumn] ?? '');
                 });
 
-                itemsTableHead.innerHTML = headersHtml + `</tr>`;
+                return rowData;
+            } 
 
-                // Render table body
-                let allRowsHtml = '';
-                items.forEach(item => {
-                    const createdAt = new Date(item.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-                    const truncatedId = item.id.substring(0, 8);
-                    let rowHtml = `<tr><td><input class="form-check-input item-checkbox" type="checkbox" name="selectedItemIds" value="${item.id}" /></td>
-                                       <td class="expandable-cell" data-field-name="Item ID" data-content="${escapeHtml(item.id)}">
-                                           <span class="truncated-text font-monospace">${truncatedId}<span class="unselectable">...</span></span>
-                                       </td>
-                                       <td>${escapeHtml(createdAt)}</td>`;
-
-                    fields.forEach(f => {
-                        const value = item.fields[f.targetColumn];
-                        let displayValue;
-                        let cellClass = '';
-
-                        if (f.type === 'Bool') {
-                            displayValue = value === true ? '✔️' : '❌';
-                        } else {
-                            const stringValue = String(value ?? '');
-
-                            if (f.type === 'Text') {
-                                if (stringValue.length > 35) {
-                                    displayValue = `<pre class="mb-0 truncated-text">${escapeHtml(stringValue.substring(0, 32))}...</pre>`;
-                                    cellClass = 'expandable-cell';
-                                } else {
-                                    displayValue = `<pre class="mb-0">${escapeHtml(stringValue)}</pre>`;
-                                }
-                            }
-                            if (['String', 'Text', 'FileUrl'].includes(f.type) && stringValue.length > 35) {
-                                displayValue = `<span class="truncated-text">${escapeHtml(stringValue.substring(0, 32))}<span class="unselectable">...</span></span>`;
-                                cellClass = 'expandable-cell';
-                            } else {
-                                displayValue = escapeHtml(stringValue);
-                            }
-                        }
-
-                        rowHtml += `<td class="${cellClass}" data-field-name="${escapeHtml(f.name)}" data-content="${escapeHtml(String(value ?? ''))}">${displayValue}</td>`;
-                    });
-                    allRowsHtml += rowHtml + '</tr>';
-                });
-
-                itemsTableBody.innerHTML = allRowsHtml;
-
+            function buildItemModalForm(fields) {
                 const itemModalBody = document.querySelector('#itemModal .modal-body');
                 let formHtml = '';
                 fields.forEach(field => {
-                    formHtml += `<div class="mb-3">
-                                                <label for="item-field-${field.id}" class="form-label">${escapeHtml(field.name)}</label>`;
-
+                    formHtml += `<div class="mb-3"><label for="item-field-${field.id}" class="form-label">${escapeHtml(field.name)}</label>`;
                     switch (field.type) {
                         case 'Text':
                             formHtml += `<textarea class="form-control" id="item-field-${field.id}" name="${field.id}"></textarea>`;
@@ -527,14 +585,71 @@
                     formHtml += `</div>`;
                 });
                 itemModalBody.innerHTML = formHtml;
+            }
 
+            function renderItemsUI(fields, items) {
                 if (itemsDataTable) {
                     itemsDataTable.destroy();
                 }
+
+                let headersHtml = `<tr><th style="width: 50px;"><input class="form-check-input" type="checkbox" id="selectAllItemsCheckbox" /></th>
+                               <th>Item ID</th>
+                               <th style="width: 180px;">Created At</th>`;
+
+                fields.forEach(f => {
+                    const fieldName = escapeHtml(f.name);
+                    const headerText = fieldName.length > 35 ? `${fieldName.substring(0, 32)}<span class="unselectable">...</span>` : fieldName;
+                    headersHtml += `<th title="${fieldName}">${headerText}</th>`;
+                });
+                itemsTableHead.innerHTML = headersHtml + `</tr>`;
+                itemsTableBody.innerHTML = '';
+
+                const tableData = items.map(item => convertItemToRowDataArray(item, fields));
+
                 itemsDataTable = new DataTable('#itemsDataTable', {
-                    order: [[2, 'desc']] // "Created At" is the 3rd column (index 2)
+                    data: tableData,
+                    order: [[2, 'desc']],
+                    columnDefs: [
+                        { // Checkbox
+                            targets: 0, orderable: false,
+                            render: (data) => `<input class="form-check-input item-checkbox" type="checkbox" name="selectedItemIds" value="${escapeHtml(data.id)}" />`
+                        },
+                        { // Item ID
+                            targets: 1,
+                            render: (data) => {
+                                const classes = data.isCustom ? 'font-monospace' : 'font-monospace text-muted';
+                                return `<div class="expandable-cell" data-field-name="Item ID" data-content="${escapeHtml(data.full)}"><span class="truncated-text ${classes}" title="${escapeHtml(data.full)}">${escapeHtml(data.display)}</span></div>`;
+                            }
+                        },
+                        { // Created At
+                            targets: 2,
+                            render: (data, type) => type === 'sort' ? data.sort : data.display
+                        },
+                        ...fields.map((f, i) => ({
+                            targets: i + 3,
+                            render: function (data, type, row) {
+                                let display = '';
+                                const stringValue = String(data ?? '');
+                                let cellClass = '';
+
+                                if (f.type === 'Bool') {
+                                    display = data === true ? '✔️' : '❌';
+                                } else if (stringValue.length > 35) {
+                                    display = `<span class="truncated-text">${escapeHtml(stringValue.substring(0, 32))}<span class="unselectable">...</span></span>`;
+                                    // This class enables the modal popup for long text.
+                                    cellClass = 'expandable-cell';
+                                } else {
+                                    display = escapeHtml(stringValue);
+                                }
+
+                                // This wrapper div with data attributes is essential.
+                                return `<div class="${cellClass}" data-field-name="${escapeHtml(f.name)}" data-content="${escapeHtml(stringValue)}">${display}</div>`;
+                            }
+                        }))
+                    ]
                 });
             }
+
             function openItemModal(itemData = null) {
                 itemForm.reset();
                 itemForm.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
@@ -575,6 +690,7 @@
                 });
 
                 const apiUrl = isEditing ? `/api/inventory/items/${itemId}` : `/api/inventory/${inventoryId}/items`;
+
                 const response = await fetch(apiUrl, {
                     method: isEditing ? 'PUT' : 'POST',
                     headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
@@ -584,8 +700,19 @@
                 if (response.ok) {
                     showToast(`Item ${isEditing ? 'updated' : 'added'} successfully.`);
                     itemModal.hide();
-                    fetchItemsAndSchema();
-                } else if (response.status === 400) {
+
+                    const contentLength = response.headers.get('content-length');
+                    if (contentLength && parseInt(contentLength, 10) > 0) {
+                        const createdItem = await response.json();
+                        if (itemsDataTable) {
+                            const newRowData = convertItemToRowDataArray(createdItem, itemSchema);
+                            itemsDataTable.row.add(newRowData).draw();
+                        }
+                    } else {
+                        fetchItemsAndSchema();
+                    }
+                }
+                else if (response.status === 400) {
                     const errors = await response.json();
 
                     itemForm.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
@@ -619,6 +746,323 @@
                 if (response.ok) { showToast('Selected items deleted.', true); fetchItemsAndSchema(); }
                 else { showToast('Failed to delete items.', true); }
             }
+
+            // --- Custom ID Tab Logic ---
+            const customIdTabEl = document.getElementById('customid-tab');
+            const currentFormatList = document.getElementById('current-format-list');
+            const availableSegmentsList = document.getElementById('available-segments-list');
+            const previewSpan = document.getElementById('idPreview');
+            const saveIdFormatBtn = document.getElementById('saveIdFormatBtn');
+            const editSegmentModal = new bootstrap.Modal(document.getElementById('editSegmentModal'));
+            const editSegmentModalLabel = document.getElementById('editSegmentModalLabel');
+            const editSegmentModalBody = document.getElementById('editSegmentModalBody');
+            const editSegmentForm = document.getElementById('editSegmentForm');
+            let currentIdFormat = [];
+
+            let datePreviewDebounceTimer;
+            let originalSegmentForCancel = null;
+            const datePreviewCache = new Map();
+
+            function debounce(func, delay) {
+                return function (...args) {
+                    clearTimeout(datePreviewDebounceTimer);
+                    datePreviewDebounceTimer = setTimeout(() => {
+                        func.apply(this, args);
+                    }, delay);
+                };
+            }
+
+            const editSelectedSegmentBtn = document.getElementById('editSelectedSegmentBtn');
+            const removeSelectedSegmentsBtn = document.getElementById('removeSelectedSegmentsBtn');
+            const clearFormatBtn = document.getElementById('clearFormatBtn');
+
+            function updateSegmentToolbar() {
+                const selectedCount = document.querySelectorAll('.segment-checkbox:checked').length;
+                editSelectedSegmentBtn.disabled = selectedCount !== 1;
+                removeSelectedSegmentsBtn.disabled = selectedCount === 0;
+            }
+
+            clearFormatBtn.addEventListener('click', () => {
+                currentIdFormat = [];
+                renderCurrentFormat();
+            });
+
+            removeSelectedSegmentsBtn.addEventListener('click', () => {
+                const selectedIds = Array.from(document.querySelectorAll('.segment-checkbox:checked')).map(cb => cb.value);
+                currentIdFormat = currentIdFormat.filter(s => !selectedIds.includes(s.id));
+                renderCurrentFormat();
+            });
+
+            editSelectedSegmentBtn.addEventListener('click', () => {
+                const selectedId = document.querySelector('.segment-checkbox:checked').value;
+                openEditSegmentModal(selectedId);
+            });
+
+            function createDefaultSegment(type) {
+                const base = { id: `client-${Math.random().toString(36).slice(2)}`, type: type };
+                switch (type) {
+                    case 'FixedText': return { ...base, value: '-' }; 
+                    case 'Sequence': return { ...base, startValue: 1, step: 1, padding: 4 };
+                    case 'Date': return { ...base, format: 'yyyy-MM-dd' };
+                    case 'RandomNumbers': return { ...base, length: 4 };
+                    case 'Guid': return { ...base, format: 'N' };
+                    default: return null;
+                }
+            }
+
+            const updateDatePreviews = debounce(async (formatsToPreview) => {
+                if (formatsToPreview.length === 0) return;
+
+                const formatsToFetch = [...new Set(formatsToPreview.map(p => p.format))]
+                    .filter(f => !datePreviewCache.has(f));
+
+                if (formatsToFetch.length > 0) {
+                    try {
+                        const response = await fetch('/api/utils/date-previews', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(formatsToFetch)
+                        });
+
+                        if (!response.ok) throw new Error('API Error');
+
+                        const previews = await response.json();
+                        previews.forEach(p => datePreviewCache.set(p.format, p));
+
+                    } catch (error) {
+                        formatsToFetch.forEach(f => datePreviewCache.set(f, { preview: '[API Error]', isValid: false }));
+                    }
+                }
+
+                formatsToPreview.forEach(item => {
+                    const previewSpan = document.getElementById(item.spanId);
+                    if (previewSpan) {
+                        const result = datePreviewCache.get(item.format);
+                        if (result) {
+                            previewSpan.textContent = result.preview;
+                            previewSpan.classList.toggle('text-danger', !result.isValid);
+                        }
+                    }
+                });
+            }, 300);
+
+            function generatePreview() {
+                if (currentIdFormat.length === 0) { previewSpan.innerHTML = 'No format defined.'; return; }
+                let previewHtml = '';
+                let formatsToFetch = [];
+                const sequenceSegment = currentIdFormat.find(s => s.type === 'Sequence');
+                const sequenceValue = sequenceSegment ? sequenceSegment.startValue : 0;
+
+                currentIdFormat.forEach(segment => {
+                    const spanId = `preview-segment-${segment.id}`;
+                    switch (segment.type) {
+                        case 'FixedText':
+                            previewHtml += `<span>${escapeHtml(segment.value)}</span>`;
+                            break;
+                        case 'Sequence':
+                            previewHtml += `<span>${escapeHtml(sequenceValue.toString().padStart(segment.padding, '0'))}</span>`;
+                            break;
+                        case 'Date':
+                            if (datePreviewCache.has(segment.format)) {
+                                const result = datePreviewCache.get(segment.format);
+                                const dangerClass = result.isValid ? '' : 'text-danger';
+                                previewHtml += `<span id="${spanId}" class="${dangerClass}">${escapeHtml(result.preview)}</span>`;
+                            } else {
+                                previewHtml += `<span id="${spanId}">[Loading date...]</span>`;
+                                formatsToFetch.push({ format: segment.format, spanId: spanId });
+                            }
+                            break;
+                        case 'RandomNumbers':
+                            previewHtml += `<span>${escapeHtml('1'.repeat(segment.length))}</span>`;
+                            break;
+                        case 'Guid':
+                            previewHtml += `<span>a1b2c3d4e5f6...</span>`;
+                            break;
+                    }
+                });
+                previewSpan.innerHTML = previewHtml;
+
+                if (formatsToFetch.length > 0) {
+                    updateDatePreviews(formatsToFetch);
+                }
+            }
+
+            function renderCurrentFormat() {
+                currentFormatList.innerHTML = '';
+                currentIdFormat.forEach(segment => {
+                    const el = document.createElement('div');
+                    el.className = 'list-group-item d-flex align-items-center';
+                    el.dataset.id = segment.id;
+                    let details = Object.entries(segment).filter(([k]) => k !== 'id' && k !== 'type').map(([k, v]) => `${k}: ${v}`).join(', ');
+                    el.innerHTML = `
+                        <input class="form-check-input me-3 segment-checkbox" type="checkbox" value="${segment.id}">
+                        <div class="flex-grow-1">
+                            <strong class="d-block">${segment.type}</strong>
+                            <small class="text-muted">${details}</small>
+                        </div>`;
+                    currentFormatList.appendChild(el);
+                });
+                generatePreview();
+                updateSegmentToolbar();
+                initializePopovers();
+            }
+
+            async function fetchIdFormat() {
+                const response = await fetch(`/api/inventory/${inventoryId}/id-format`);
+                if (!response.ok) {
+                    showToast('Failed to load ID format.', true);
+                    return;
+                }
+                currentIdFormat = await response.json();
+                renderCurrentFormat();
+            }
+
+            async function saveIdFormat() {
+                const response = await fetch(`/api/inventory/${inventoryId}/id-format`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
+                    body: JSON.stringify(currentIdFormat)
+                });
+                if (response.ok) { showToast('ID format saved successfully.'); }
+                else { showToast('Failed to save ID format.', true); }
+            }
+
+            function openEditSegmentModal(segmentId) {
+                const segment = currentIdFormat.find(s => s.id === segmentId);
+                if (!segment) return;
+
+                originalSegmentForCancel = JSON.parse(JSON.stringify(segment));
+
+                document.getElementById('segmentId').value = segmentId;
+                editSegmentModalLabel.textContent = `Edit ${segment.type} Segment`;
+                let formHtml = '';
+
+                switch (segment.type) {
+                    case 'FixedText':
+                        formHtml = `<div class="mb-3"><label for="prop-value" class="form-label">Text Value</label><input type="text" class="form-control" id="prop-value" name="value" value="${escapeHtml(String(segment.value))}" required></div>`;
+                        break;
+                    case 'Sequence':
+                        formHtml = `<div class="mb-3"><label for="prop-startValue" class="form-label">Start Value</label><input type="number" class="form-control" id="prop-startValue" name="startValue" value="${segment.startValue}" min="0" required></div>
+                                    <div class="mb-3"><label for="prop-step" class="form-label">Step</label><input type="number" class="form-control" id="prop-step" name="step" value="${segment.step}" min="1" required></div>
+                                    <div class="mb-3"><label for="prop-padding" class="form-label">Padding (Number of digits)</label><input type="number" class="form-control" id="prop-padding" name="padding" value="${segment.padding}" min="1" max="20" required></div>`;
+                        break;
+                    case 'Date':
+                        formHtml = `<div class="mb-3"><label for="prop-format" class="form-label">Date Format</label><input type="text" class="form-control" id="prop-format" name="format" value="${escapeHtml(String(segment.format))}" required><small class="form-text text-muted">e.g., yyyy-MM-dd, MMddyy, HH:mm</small></div>`;
+                        break;
+                    case 'RandomNumbers':
+                        formHtml = `<div class="mb-3"><label for="prop-length" class="form-label">Length</label><input type="number" class="form-control" id="prop-length" name="length" value="${segment.length}" min="1" max="20" required></div>`;
+                        break;
+                    case 'Guid':
+                        const formats = ['N', 'D', 'B', 'P'];
+                        let options = formats.map(f => `<option value="${f}" ${segment.format === f ? 'selected' : ''}>${f}</option>`).join('');
+                        formHtml = `<div class="mb-3"><label for="prop-format" class="form-label">Format</label><select class="form-select" id="prop-format" name="format">${options}</select></div>`;
+                        break;
+                }
+
+                editSegmentModalBody.innerHTML = formHtml;
+
+                if (segment.type === 'Date') {
+                    const formatInput = editSegmentModalBody.querySelector('#prop-format');
+                    formatInput.addEventListener('input', () => {
+                        const segmentToUpdate = currentIdFormat.find(s => s.id === segmentId);
+                        if (segmentToUpdate) {
+                            segmentToUpdate.format = formatInput.value;
+                            generatePreview();
+                        }
+                    });
+                }
+
+                editSegmentModal.show();
+            }
+
+            customIdTabEl.addEventListener('show.bs.tab', () => {
+                if (currentFormatList.innerHTML.trim() === '') {
+                    fetchIdFormat();
+                }
+            });
+            saveIdFormatBtn.addEventListener('click', saveIdFormat);
+            currentFormatList.addEventListener('change', e => {
+                if (e.target.classList.contains('segment-checkbox')) {
+                    updateSegmentToolbar();
+                }
+            });
+
+            new Sortable(availableSegmentsList, { group: { name: 'segments', pull: 'clone', put: false }, sort: false, animation: 150 });
+            new Sortable(currentFormatList, {
+                group: 'segments', animation: 150,
+                onAdd: evt => {
+                    const newSegment = createDefaultSegment(evt.item.dataset.segmentType);
+                    evt.item.remove(); // Remove the placeholder clone immediately
+                    if (newSegment) {
+                        currentIdFormat.splice(evt.newIndex, 0, newSegment);
+                        renderCurrentFormat();
+                        openEditSegmentModal(newSegment.id); // Automatically open the edit modal
+                    }
+                },
+                onEnd: evt => {
+                    const [movedItem] = currentIdFormat.splice(evt.oldIndex, 1);
+                    currentIdFormat.splice(evt.newIndex, 0, movedItem);
+                    renderCurrentFormat();
+                }
+            });
+
+            currentFormatList.addEventListener('click', e => {
+                const segmentId = e.target.closest('.list-group-item')?.dataset.id;
+                if (!segmentId) return;
+                if (e.target.classList.contains('remove-segment-btn')) {
+                    currentIdFormat = currentIdFormat.filter(s => s.id !== segmentId);
+                    renderCurrentFormat();
+                }
+                if (e.target.classList.contains('edit-segment-btn')) openEditSegmentModal(segmentId);
+            });
+
+            editSegmentForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+                clearTimeout(datePreviewDebounceTimer); // Prevent unnecessary API call
+                const segmentId = document.getElementById('segmentId').value;
+                const segmentIndex = currentIdFormat.findIndex(s => s.id === segmentId);
+                if (segmentIndex === -1) return;
+
+                const segment = currentIdFormat[segmentIndex];
+                const formData = new FormData(editSegmentForm);
+
+                // Explicitly update properties based on segment type
+                switch (segment.type) {
+                    case 'FixedText':
+                        segment.value = formData.get('value');
+                        break;
+                    case 'Sequence':
+                        segment.startValue = parseInt(formData.get('startValue'), 10);
+                        segment.step = parseInt(formData.get('step'), 10);
+                        segment.padding = parseInt(formData.get('padding'), 10);
+                        break;
+                    case 'Date':
+                        segment.format = formData.get('format');
+                        break;
+                    case 'RandomNumbers':
+                        segment.length = parseInt(formData.get('length'), 10);
+                        break;
+                    case 'Guid':
+                        segment.format = formData.get('format');
+                        break;
+                }
+
+                originalSegmentForCancel = null; // Signal that the save was successful
+                editSegmentModal.hide();
+                renderCurrentFormat();
+            });
+
+            document.getElementById('editSegmentModal').addEventListener('hide.bs.modal', () => {
+                if (originalSegmentForCancel) {
+                    // If this object still exists, it means save was not clicked.
+                    const segmentIndex = currentIdFormat.findIndex(s => s.id === originalSegmentForCancel.id);
+                    if (segmentIndex !== -1) {
+                        currentIdFormat[segmentIndex] = originalSegmentForCancel; // Restore original state
+                    }
+                    originalSegmentForCancel = null;
+                    renderCurrentFormat(); // Re-render to show the restored state
+                }
+            });
 
             // --- Event Handlers ---
             document.querySelector('button[data-bs-target="#itemModal"]').addEventListener('click', () => openItemModal());
@@ -663,17 +1107,21 @@
             itemsTableBody.addEventListener('click', e => { if (e.target.closest('.expandable-cell')) { const cell = e.target.closest('.expandable-cell'); viewContentModalLabel.textContent = cell.dataset.fieldName; viewContentModalBody.textContent = cell.dataset.content; viewContentModal.show(); } });
 
             // --- Tab Loading Logic ---
-            const fieldsTabEl = document.getElementById('fields-tab');
             const itemsTabEl = document.getElementById('items-tab');
+            const fieldsTabEl = document.getElementById('fields-tab');
 
-            const loadTabData = () => {
-                if (itemsTabEl.classList.contains('active')) fetchItemsAndSchema();
-                else if (fieldsTabEl.classList.contains('active')) fetchFields();
-            };
-            itemsTabEl.addEventListener('shown.bs.tab', () => fetchItemsAndSchema());
-            fieldsTabEl.addEventListener('shown.bs.tab', () => fetchFields());
+            fieldsTabEl.addEventListener('show.bs.tab', fetchFields);
 
-            loadTabData();
+            fetchItemsAndSchema();
+            fetchIdFormat();
+
+            function initializePopovers() {
+                const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
+                const popoverList = [...popoverTriggerList].map(popoverTriggerEl => new bootstrap.Popover(popoverTriggerEl));
+            }
+
+            initializePopovers();
+
         });
     </script>
 }

@@ -3,11 +3,6 @@ using System.Text.Json.Serialization;
 
 namespace InventoryManagementSystem.Models.CustomId;
 
-[JsonDerivedType(typeof(FixedTextSegment), typeDiscriminator: "fixed")]
-[JsonDerivedType(typeof(SequenceSegment), typeDiscriminator: "sequence")]
-[JsonDerivedType(typeof(DateSegment), typeDiscriminator: "date")]
-[JsonDerivedType(typeof(RandomNumbersSegment), typeDiscriminator: "random")]
-[JsonDerivedType(typeof(GuidSegment), typeDiscriminator: "guid")]
 public abstract class IdSegment
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -17,31 +12,38 @@ public abstract class IdSegment
 public class FixedTextSegment : IdSegment
 {
     public override string Type => "FixedText";
+    [JsonInclude]
     public string Value { get; set; } = string.Empty;
 }
 
 public class SequenceSegment : IdSegment
 {
     public override string Type => "Sequence";
+    [JsonInclude]
     public int StartValue { get; set; } = 1;
+    [JsonInclude]
     public int Step { get; set; } = 1;
+    [JsonInclude]
     public int Padding { get; set; } = 1;
 }
 
 public class DateSegment : IdSegment
 {
     public override string Type => "Date";
+    [JsonInclude]
     public string Format { get; set; } = "yyyyMMdd";
 }
 
 public class RandomNumbersSegment : IdSegment
 {
     public override string Type => "RandomNumbers";
+    [JsonInclude]
     public int Length { get; set; } = 4;
 }
 
 public class GuidSegment : IdSegment
 {
     public override string Type => "Guid";
-    public string Format { get; set; } = "N"; // N, D, B, P
+    [JsonInclude]
+    public string Format { get; set; } = "N";
 }

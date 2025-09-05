@@ -13,6 +13,8 @@ public class Item
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    public string? CustomIdFormatHashApplied { get; set; }
+
     public string? CustomString1 { get; set; }
     public string? CustomString2 { get; set; }
     public string? CustomString3 { get; set; }
