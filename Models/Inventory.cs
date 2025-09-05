@@ -20,6 +20,8 @@ public class Inventory
     [Required]
     public string OwnerId { get; set; } = string.Empty;
 
+    public string? CustomIdFormat { get; set; }
+
     [ForeignKey("OwnerId")]
     public virtual ApplicationUser? Owner { get; set; }
 
