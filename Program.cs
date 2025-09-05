@@ -1,4 +1,5 @@
 using InventoryManagementSystem.Data;
+using InventoryManagementSystem.Services;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -38,6 +39,8 @@ builder.Services.AddAuthentication()
         options.ClientId = builder.Configuration["Microsoft:ClientId"]!;
         options.ClientSecret = builder.Configuration["Microsoft:ClientSecret"]!;
     });
+
+builder.Services.AddScoped<ICustomIdService, CustomIdService>();
 
 builder.Services.AddControllersWithViews()
     .AddJsonOptions(options =>

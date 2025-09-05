@@ -11,6 +11,9 @@ using System.Globalization;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using InventoryManagementSystem.Services;
+using InventoryManagementSystem.Models.CustomId;
+using System.Text.Json;
 
 namespace InventoryManagementSystem.Controllers;
 
@@ -42,15 +45,18 @@ public class InventoryController : Controller
     private readonly ApplicationDbContext _context;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ILogger<InventoryController> _logger;
+    private readonly ICustomIdService _customIdService;
 
     public InventoryController(
         ApplicationDbContext context,
         UserManager<ApplicationUser> userManager,
-        ILogger<InventoryController> logger)
+        ILogger<InventoryController> logger,
+        ICustomIdService customIdService)
     {
         _context = context;
         _userManager = userManager;
         _logger = logger;
+        _customIdService = customIdService;
     }
 
     // GET: /Inventory/Create
@@ -391,7 +397,14 @@ public class InventoryController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateItem(string inventoryId, [FromBody] ItemApiRequest request)
     {
-        var inventory = await _context.Inventories.FindAsync(inventoryId);
+        // Use a transaction to ensure Item creation and Inventory sequence update are atomic.
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        // Lock the inventory row to prevent race conditions on the sequence counter.
+        var inventory = await _context.Inventories
+            .FromSql($"SELECT * FROM \"Inventories\" WHERE \"Id\" = {inventoryId} FOR UPDATE")
+            .FirstOrDefaultAsync();
+
         if (inventory == null) return NotFound();
 
         var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -402,9 +415,11 @@ public class InventoryController : Controller
 
         var fields = await _context.CustomFields
             .Where(cf => cf.InventoryId == inventoryId)
+            .AsNoTracking()
             .ToListAsync();
 
         var newItem = new Item { InventoryId = inventoryId };
+        var validationErrors = new Dictionary<string, string>();
 
         foreach (var field in fields)
         {
@@ -417,38 +432,95 @@ public class InventoryController : Controller
                     {
                         var valueStr = value.ToString();
                         object? convertedValue;
-
                         var targetType = Nullable.GetUnderlyingType(propInfo.PropertyType) ?? propInfo.PropertyType;
 
-                        if (targetType == typeof(bool))
+                        if (string.IsNullOrEmpty(valueStr))
                         {
-                            convertedValue = valueStr != null && (valueStr.Equals("true", StringComparison.OrdinalIgnoreCase) || valueStr.Equals("on", StringComparison.OrdinalIgnoreCase));
+                            convertedValue = null;
+                        }
+                        else if (targetType == typeof(bool))
+                        {
+                            convertedValue = valueStr.Equals("true", StringComparison.OrdinalIgnoreCase) || valueStr.Equals("on", StringComparison.OrdinalIgnoreCase);
                         }
                         else
                         {
-                            convertedValue = Convert.ChangeType(valueStr, targetType, System.Globalization.CultureInfo.InvariantCulture);
+                            convertedValue = Convert.ChangeType(valueStr, targetType, CultureInfo.InvariantCulture);
                         }
                         propInfo.SetValue(newItem, convertedValue);
                     }
-                    catch (Exception)
+                    catch (Exception ex) when (ex is FormatException || ex is InvalidCastException)
                     {
-                        // Silently ignore fields that fail conversion
+                        validationErrors[field.Id] = $"Invalid value for '{field.Name}'. Please check the format.";
                     }
                 }
             }
         }
-        _context.Items.Add(newItem);
-        await _context.SaveChangesAsync();
-        var createdItemDto = new ItemDto
+
+        if (validationErrors.Any())
         {
-            Id = newItem.Id,
-            CreatedAt = newItem.CreatedAt,
-            Fields = fields.ToDictionary(
-                field => field.TargetColumn,
-                field => typeof(Item).GetProperty(field.TargetColumn)?.GetValue(newItem)
-            )
-        };
-        return CreatedAtAction(nameof(GetItemsData), new { inventoryId }, createdItemDto);
+            return BadRequest(new { message = "Validation failed.", errors = validationErrors });
+        }
+
+        // Generate Custom ID if format is defined
+        if (!string.IsNullOrWhiteSpace(inventory.CustomIdFormat))
+        {
+            var segments = JsonSerializer.Deserialize<List<IdSegment>>(inventory.CustomIdFormat);
+            if (segments != null && segments.Any())
+            {
+                newItem.CustomId = _customIdService.GenerateId(inventory, segments);
+            }
+        }
+
+        _context.Items.Add(newItem);
+
+        const int maxRetries = 3;
+        for (int i = 0; i < maxRetries; i++)
+        {
+            try
+            {
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                var createdItemDto = new ItemDto
+                {
+                    Id = newItem.Id,
+                    CreatedAt = newItem.CreatedAt,
+                    Fields = fields.ToDictionary(
+                        field => field.TargetColumn,
+                        field => typeof(Item).GetProperty(field.TargetColumn)?.GetValue(newItem)
+                    )
+                };
+                return CreatedAtAction(nameof(GetItemsData), new { inventoryId }, createdItemDto);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
+            {
+                _logger.LogWarning(ex, "Unique constraint violation on CustomId for inventory {InventoryId}. This should be rare with the new sequence strategy. Retry {RetryCount}/{MaxRetries}", inventoryId, i + 1, maxRetries);
+
+                _context.Entry(newItem).State = EntityState.Detached;
+                _context.Entry(inventory).State = EntityState.Detached;
+
+                if (i == maxRetries - 1)
+                {
+                    await transaction.RollbackAsync();
+                    return Conflict("Failed to generate a unique item ID after multiple attempts. Please try again.");
+                }
+
+                inventory = await _context.Inventories
+                    .FromSql($"SELECT * FROM \"Inventories\" WHERE \"Id\" = {inventoryId} FOR UPDATE")
+                    .FirstAsync();
+                newItem.Id = Guid.NewGuid().ToString();
+                if (!string.IsNullOrWhiteSpace(inventory.CustomIdFormat))
+                {
+                    var segments = JsonSerializer.Deserialize<List<IdSegment>>(inventory.CustomIdFormat);
+                    newItem.CustomId = _customIdService.GenerateId(inventory, segments!);
+                }
+
+                _context.Items.Add(newItem);
+            }
+        }
+
+        await transaction.RollbackAsync();
+        return StatusCode(500, "An unexpected error occurred while creating the item.");
     }
 
     [HttpGet]
@@ -573,6 +645,48 @@ public class InventoryController : Controller
             .ToListAsync();
 
         _context.Items.RemoveRange(itemsToDelete);
+        await _context.SaveChangesAsync();
+        return Ok();
+    }
+
+    [HttpGet]
+    [Route("api/inventory/{inventoryId}/id-format")]
+    public async Task<IActionResult> GetIdFormat(string inventoryId)
+    {
+        var inventory = await _context.Inventories.FindAsync(inventoryId);
+        if (inventory == null) return NotFound();
+
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (inventory.OwnerId != currentUserId && !User.IsInRole("Admin"))
+        {
+            return Forbid();
+        }
+
+        return Content(inventory.CustomIdFormat ?? "[]", "application/json");
+    }
+
+    [HttpPut]
+    [Route("api/inventory/{inventoryId}/id-format")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveIdFormat(string inventoryId, [FromBody] JsonElement format)
+    {
+        var inventory = await _context.Inventories.FindAsync(inventoryId);
+        if (inventory == null) return NotFound();
+
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (inventory.OwnerId != currentUserId && !User.IsInRole("Admin"))
+        {
+            return Forbid();
+        }
+
+        inventory.CustomIdFormat = format.ToString();
+        // Reset sequence counter if user clears the format or removes the sequence segment
+        var segments = JsonSerializer.Deserialize<List<IdSegment>>(inventory.CustomIdFormat);
+        if (segments == null || !segments.OfType<SequenceSegment>().Any())
+        {
+            inventory.LastSequenceValue = 0;
+        }
+
         await _context.SaveChangesAsync();
         return Ok();
     }
