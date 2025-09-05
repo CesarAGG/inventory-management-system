@@ -4,12 +4,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using Npgsql;
 
 namespace InventoryManagementSystem.Controllers;
 
@@ -111,34 +112,6 @@ public class InventoryController : Controller
         return View();
     }
 
-    [HttpGet]
-    [Route("api/inventory/{inventoryId}/fields")]
-    public async Task<IActionResult> GetCustomFields(string inventoryId)
-    {
-        var inventory = await _context.Inventories.FindAsync(inventoryId);
-        if (inventory == null) return NotFound();
-
-        // Authorization check
-        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (inventory.OwnerId != currentUserId && !User.IsInRole("Admin"))
-        {
-            return Forbid();
-        }
-
-        var fields = await _context.CustomFields
-            .Where(cf => cf.InventoryId == inventoryId)
-            .OrderBy(cf => cf.Order)
-            .Select(cf => new CustomFieldDto
-            {
-                Id = cf.Id,
-                Name = cf.Name,
-                Type = cf.Type.ToString()
-            })
-            .ToListAsync();
-
-        return Ok(fields);
-    }
-
     [HttpPost]
     [Route("api/inventory/{inventoryId}/fields")]
     [ValidateAntiForgeryToken]
@@ -225,6 +198,62 @@ public class InventoryController : Controller
         return CreatedAtAction(nameof(GetCustomFields), new { inventoryId }, resultDto);
     }
 
+    [HttpGet]
+    [Route("api/inventory/{inventoryId}/fields")]
+    public async Task<IActionResult> GetCustomFields(string inventoryId)
+    {
+        var inventory = await _context.Inventories.FindAsync(inventoryId);
+        if (inventory == null) return NotFound();
+
+        // Authorization check
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (inventory.OwnerId != currentUserId && !User.IsInRole("Admin"))
+        {
+            return Forbid();
+        }
+
+        var fields = await _context.CustomFields
+            .Where(cf => cf.InventoryId == inventoryId)
+            .OrderBy(cf => cf.Order)
+            .Select(cf => new CustomFieldDto
+            {
+                Id = cf.Id,
+                Name = cf.Name,
+                Type = cf.Type.ToString()
+            })
+            .ToListAsync();
+
+        return Ok(fields);
+    }
+
+    [HttpPut]
+    [Route("api/inventory/fields/{fieldId}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateCustomField(string fieldId, [FromBody] CustomFieldDto fieldUpdate)
+    {
+        var fieldToUpdate = await _context.CustomFields
+            .Include(f => f.Inventory)
+            .FirstOrDefaultAsync(f => f.Id == fieldId);
+
+        if (fieldToUpdate == null) return NotFound();
+
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (fieldToUpdate.Inventory?.OwnerId != currentUserId && !User.IsInRole("Admin"))
+        {
+            return Forbid();
+        }
+
+        if (string.IsNullOrWhiteSpace(fieldUpdate.Name))
+        {
+            return BadRequest("Field name cannot be empty.");
+        }
+
+        fieldToUpdate.Name = fieldUpdate.Name;
+        await _context.SaveChangesAsync();
+
+        return Ok();
+    }
+
     [HttpPost]
     [Route("api/inventory/fields/delete")]
     [ValidateAntiForgeryToken]
@@ -252,6 +281,20 @@ public class InventoryController : Controller
         if (fieldsToDelete.Select(f => f.InventoryId).Distinct().Count() > 1)
         {
             return BadRequest("Cannot delete fields from multiple inventories in a single request.");
+        }
+
+        // Clear the orphaned data in the Items table before deleting the fields.
+        foreach (var field in fieldsToDelete)
+        {
+            var itemsToUpdate = await _context.Items
+                .Where(i => i.InventoryId == field.InventoryId)
+                .ToListAsync();
+
+            foreach (var item in itemsToUpdate)
+            {
+                var propInfo = typeof(Item).GetProperty(field.TargetColumn);
+                propInfo?.SetValue(item, null);
+            }
         }
 
         _context.CustomFields.RemoveRange(fieldsToDelete);
@@ -406,6 +449,107 @@ public class InventoryController : Controller
             )
         };
         return CreatedAtAction(nameof(GetItemsData), new { inventoryId }, createdItemDto);
+    }
+
+    [HttpGet]
+    [Route("api/inventory/items/{itemId}")]
+    public async Task<IActionResult> GetItem(string itemId)
+    {
+        var item = await _context.Items
+            .Include(i => i.Inventory)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(i => i.Id == itemId);
+
+        if (item == null) return NotFound();
+
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (item.Inventory?.OwnerId != currentUserId && !User.IsInRole("Admin"))
+        {
+            return Forbid();
+        }
+
+        var fields = await _context.CustomFields
+            .Where(cf => cf.InventoryId == item.InventoryId)
+            .OrderBy(cf => cf.Order)
+            .AsNoTracking().ToListAsync();
+
+        var itemDto = new ItemDto
+        {
+            Id = item.Id,
+            CreatedAt = item.CreatedAt,
+            Fields = fields.ToDictionary(
+                field => field.TargetColumn,
+                field => typeof(Item).GetProperty(field.TargetColumn)?.GetValue(item)
+            )
+        };
+        return Ok(itemDto);
+    }
+
+    [HttpPut]
+    [Route("api/inventory/items/{itemId}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateItem(string itemId, [FromBody] ItemApiRequest request)
+    {
+        var itemToUpdate = await _context.Items
+            .Include(i => i.Inventory)
+            .FirstOrDefaultAsync(i => i.Id == itemId);
+
+        if (itemToUpdate == null) return NotFound();
+
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (itemToUpdate.Inventory?.OwnerId != currentUserId && !User.IsInRole("Admin"))
+        {
+            return Forbid();
+        }
+
+        var fields = await _context.CustomFields
+            .Where(cf => cf.InventoryId == itemToUpdate.InventoryId)
+            .ToListAsync();
+
+        var validationErrors = new Dictionary<string, string>();
+
+        foreach (var field in fields)
+        {
+            if (request.FieldValues.TryGetValue(field.Id, out var value))
+            {
+                var propInfo = typeof(Item).GetProperty(field.TargetColumn);
+                if (propInfo != null)
+                {
+                    try
+                    {
+                        var valueStr = value?.ToString();
+                        object? convertedValue;
+                        var targetType = Nullable.GetUnderlyingType(propInfo.PropertyType) ?? propInfo.PropertyType;
+
+                        if (string.IsNullOrEmpty(valueStr))
+                        {
+                            convertedValue = null;
+                        }
+                        else if (targetType == typeof(bool))
+                        {
+                            convertedValue = valueStr.Equals("true", StringComparison.OrdinalIgnoreCase) || valueStr.Equals("on", StringComparison.OrdinalIgnoreCase);
+                        }
+                        else
+                        {
+                            convertedValue = Convert.ChangeType(valueStr, targetType, CultureInfo.InvariantCulture);
+                        }
+                        propInfo.SetValue(itemToUpdate, convertedValue);
+                    }
+                    catch (Exception)
+                    {
+                        validationErrors.Add(field.Id, $"Invalid data format for field '{field.Name}'.");
+                    }
+                }
+            }
+        }
+
+        if (validationErrors.Any())
+        {
+            return BadRequest(validationErrors);
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok();
     }
 
     [HttpPost]

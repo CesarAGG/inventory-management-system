@@ -37,12 +37,14 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="card-body p-0">
-                            <div class="table-responsive">
-                                <table class="table table-hover mb-0 table-no-wrap">
-                                    <thead id="items-table-head"></thead>
-                                    <tbody id="items-table-body"></tbody>
-                                </table>
+                        <div class="card-body">
+                            <div class="row justify-content-center">
+                                <div class="col-auto table-responsive">
+                                    <table class="table table-hover mb-0" id="itemsDataTable">
+                                        <thead id="items-table-head"></thead>
+                                        <tbody id="items-table-body"></tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -62,6 +64,7 @@
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <h5 class="mb-0">Current Fields</h5>
                                     <div>
+                                        <button type="button" class="btn btn-outline-secondary" id="editSelectedFieldBtn" disabled>Edit Selected</button>
                                         <button type="button" class="btn btn-danger" id="deleteSelectedFieldsBtn">Delete Selected</button>
                                     </div>
                                 </div>
@@ -176,6 +179,31 @@
     </div>
 </div>
 
+<!-- Edit Field Modal -->
+<div class="modal fade" id="editFieldModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Field Name</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editFieldForm">
+                <div class="modal-body">
+                    <input type="hidden" id="editFieldId" />
+                    <div class="form-group">
+                        <label for="editFieldNameInput" class="form-label">New Name</label>
+                        <input type="text" class="form-control" id="editFieldNameInput" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 @section Styles {
     <style>
         .expandable-cell .truncated-text {
@@ -200,6 +228,12 @@
             text-decoration: underline;
             text-decoration-style: dotted;
         }
+
+        .form-control.is-invalid:focus, .form-select.is-invalid:focus {
+            border-color: #dc3545 !important;
+            box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25) !important;
+            outline: 0 !important;
+        }
     </style>
 }
 
@@ -210,19 +244,20 @@
             // --- Common variables ---
             const inventoryId = document.querySelector('input[name="inventoryId"]').value;
             const csrfToken = document.querySelector('input[name="__RequestVerificationToken"]').value;
+            let itemsDataTable = null;
 
             // --- Toast Function & escapeHtml ---
             function showToast(message, isError = false) {
                 const toastContainer = document.querySelector('.toast-container');
                 const toastId = 'toast-' + Math.random().toString(36).substr(2, 9);
                 const toastHtml = `
-                        <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
-                            <div class="toast-header ${isError ? 'bg-danger text-white' : 'bg-success text-white'}">
-                                <strong class="me-auto">${isError ? 'Error' : 'Success'}</strong>
-                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
-                            </div>
-                            <div class="toast-body">${escapeHtml(message)}</div>
-                        </div>`;
+                                        <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                                            <div class="toast-header ${isError ? 'bg-danger text-white' : 'bg-success text-white'}">
+                                                <strong class="me-auto">${isError ? 'Error' : 'Success'}</strong>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                                            </div>
+                                            <div class="toast-body">${escapeHtml(message)}</div>
+                                        </div>`;
                 toastContainer.insertAdjacentHTML('beforeend', toastHtml);
                 const toastElement = document.getElementById(toastId);
                 const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
@@ -241,8 +276,28 @@
             const deleteFieldModal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
             const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
             const deleteSelectedFieldsBtn = document.getElementById('deleteSelectedFieldsBtn');
+            const editSelectedFieldBtn = document.getElementById('editSelectedFieldBtn');
+            const editFieldModal = new bootstrap.Modal(document.getElementById('editFieldModal'));
+            const editFieldForm = document.getElementById('editFieldForm');
+            const editFieldIdInput = document.getElementById('editFieldId');
+            const editFieldNameInput = document.getElementById('editFieldNameInput');
             let fieldsToDeleteIds = [];
 
+            editFieldForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+                const fieldId = editFieldIdInput.value;
+                const newName = editFieldNameInput.value;
+                updateFieldName(fieldId, newName);
+                editFieldModal.hide();
+            });
+
+            function refreshAllData() {
+                if (itemsDataTable) {
+                    itemsDataTable.destroy();
+                    itemsDataTable = null;
+                }
+                fetchItemsAndSchema();
+            }
             async function fetchFields() {
                 const response = await fetch(`/api/inventory/${inventoryId}/fields`);
                 if (!response.ok) { showToast('Failed to load fields.', true); return; }
@@ -262,6 +317,8 @@
                     newFieldNameInput.value = '';
                     showToast('Field added successfully.');
                     fetchFields();
+
+                    refreshAllData();
                 } else {
                     const errorText = await response.text();
                     showToast(`Failed to add field: ${errorText}`, true);
@@ -281,10 +338,21 @@
                 if (response.ok) {
                     showToast('Selected fields deleted successfully.');
                     fetchFields();
+
+                    refreshAllData();
                 } else {
                     showToast('Failed to delete selected fields.', true);
                 }
                 fieldsToDeleteIds = [];
+            }
+            async function updateFieldName(fieldId, newName) {
+                const response = await fetch(`/api/inventory/fields/${fieldId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
+                    body: JSON.stringify({ name: newName, type: '' })
+                });
+                if (response.ok) { showToast('Field renamed successfully.'); fetchFields(); }
+                else { showToast('Failed to rename field.', true); }
             }
             async function reorderFields(orderedIds) {
                 const response = await fetch(`/api/inventory/${inventoryId}/fields/reorder`, {
@@ -307,28 +375,46 @@
                     const li = document.createElement('li');
                     li.className = 'list-group-item d-flex align-items-center';
                     li.dataset.id = field.id;
-
                     const fieldName = escapeHtml(field.name);
                     let nameHtml = fieldName;
-                    if (fieldName.length > 35) {
-                        nameHtml = `<span class="truncated-text" title="${fieldName}">${fieldName.substring(0, 32)}<span class="unselectable">...</span></span>`;
-                    }
-
+                    if (fieldName.length > 35) { nameHtml = `<span class="truncated-text" title="${fieldName}">${fieldName.substring(0, 32)}<span class="unselectable">...</span></span>`; }
                     li.innerHTML = `
-            <input class="form-check-input me-2" type="checkbox" value="${field.id}" name="selectedFieldIds">
-            <span class="drag-handle" style="cursor: move; margin-right: 10px;">&#9776;</span>
-            <div class="flex-grow-1" style="min-width: 0;"> <!-- Fix for overflow -->
-                <strong class="d-block text-truncate">${nameHtml}</strong>
-                <small class="text-muted d-block">${escapeHtml(field.type)}</small>
-            </div>`;
+                                <input class="form-check-input me-2" type="checkbox" value="${field.id}" name="selectedFieldIds">
+                                <span class="drag-handle" style="cursor: move; margin-right: 10px;">&#9776;</span>
+                                <div class="flex-grow-1" style="min-width: 0;">
+                                    <strong class="d-block text-truncate field-name" data-field-id="${field.id}">${nameHtml}</strong>
+                                    <small class="text-muted d-block">${escapeHtml(field.type)}</small>
+                                </div>`;
                     fieldsList.appendChild(li);
                 });
             }
 
             new Sortable(fieldsList, { animation: 150, handle: '.drag-handle', onEnd: () => reorderFields(Array.from(fieldsList.querySelectorAll('li[data-id]')).map(item => item.dataset.id)) });
             addFieldBtn.addEventListener('click', addField);
-            fieldsList.addEventListener('click', e => { if (e.target.classList.contains('delete-field-btn')) { fieldToDeleteId = e.target.dataset.fieldId; deleteFieldModal.show(); } });
             confirmDeleteBtn.addEventListener('click', deleteSelectedFields);
+            editSelectedFieldBtn.addEventListener('click', () => {
+                const selectedCheckbox = document.querySelector('input[name="selectedFieldIds"]:checked');
+                if (!selectedCheckbox) return;
+
+                const fieldNameSpan = selectedCheckbox.closest('li').querySelector('.field-name');
+                const currentName = fieldNameSpan.textContent.trim().replace('...', '');
+
+                editFieldIdInput.value = selectedCheckbox.value;
+                editFieldNameInput.value = currentName;
+                editFieldModal.show();
+            });
+
+            const fieldSelectionChangeHandler = () => {
+                const selectedCount = document.querySelectorAll('input[name="selectedFieldIds"]:checked').length;
+                if (selectedCount === 1) {
+                    editSelectedFieldBtn.disabled = false;
+                    editSelectedFieldBtn.classList.replace('btn-outline-secondary', 'btn-secondary');
+                } else {
+                    editSelectedFieldBtn.disabled = true;
+                    editSelectedFieldBtn.classList.replace('btn-secondary', 'btn-outline-secondary');
+                }
+            };
+            fieldsList.addEventListener('change', fieldSelectionChangeHandler);
 
             // --- Items Tab Logic ---
             const itemsTableHead = document.getElementById('items-table-head');
@@ -357,16 +443,17 @@
             function renderItemsUI(fields, items) {
                 // Render table headers
                 let headersHtml = `<tr><th style="width: 50px;"><input class="form-check-input" type="checkbox" id="selectAllItemsCheckbox" /></th>
-                       <th style="width: 120px;">Item ID</th><th style="width: 180px;">Created At</th>`;
+                                       <th style="width: 120px;">Item ID</th>
+                                       <th style="width: 180px;">Created At</th>`;
 
                 fields.forEach(f => {
                     const fieldName = escapeHtml(f.name);
                     if (fieldName.length > 35) {
                         headersHtml += `<th title="${fieldName}">
-                            <span class="truncated-text">
-                                ${fieldName.substring(0, 32)}<span class="unselectable">...</span>
-                            </span>
-                        </th>`;
+                                            <span class="truncated-text">
+                                                ${fieldName.substring(0, 32)}<span class="unselectable">...</span>
+                                            </span>
+                                        </th>`;
                     } else {
                         headersHtml += `<th>${fieldName}</th>`;
                     }
@@ -380,10 +467,10 @@
                     const createdAt = new Date(item.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
                     const truncatedId = item.id.substring(0, 8);
                     let rowHtml = `<tr><td><input class="form-check-input item-checkbox" type="checkbox" name="selectedItemIds" value="${item.id}" /></td>
-                       <td class="expandable-cell" data-field-name="Item ID" data-content="${escapeHtml(item.id)}">
-                           <span class="truncated-text font-monospace">${truncatedId}<span class="unselectable">...</span></span>
-                       </td>
-                       <td>${escapeHtml(createdAt)}</td>`;
+                                       <td class="expandable-cell" data-field-name="Item ID" data-content="${escapeHtml(item.id)}">
+                                           <span class="truncated-text font-monospace">${truncatedId}<span class="unselectable">...</span></span>
+                                       </td>
+                                       <td>${escapeHtml(createdAt)}</td>`;
 
                     fields.forEach(f => {
                         const value = item.fields[f.targetColumn];
@@ -422,7 +509,7 @@
                 let formHtml = '';
                 fields.forEach(field => {
                     formHtml += `<div class="mb-3">
-                                <label for="item-field-${field.id}" class="form-label">${escapeHtml(field.name)}</label>`;
+                                                <label for="item-field-${field.id}" class="form-label">${escapeHtml(field.name)}</label>`;
 
                     switch (field.type) {
                         case 'Text':
@@ -440,8 +527,86 @@
                     formHtml += `</div>`;
                 });
                 itemModalBody.innerHTML = formHtml;
+
+                if (itemsDataTable) {
+                    itemsDataTable.destroy();
+                }
+                itemsDataTable = new DataTable('#itemsDataTable', {
+                    order: [[2, 'desc']] // "Created At" is the 3rd column (index 2)
+                });
             }
-            async function saveItem() { /* Will be implemented in Part 2 */ }
+            function openItemModal(itemData = null) {
+                itemForm.reset();
+                itemForm.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+                itemForm.querySelectorAll('.invalid-feedback').forEach(el => el.remove());
+
+                if (itemData) { // Edit Mode
+                    itemModalLabel.textContent = 'Edit Item';
+                    itemIdInput.value = itemData.id;
+
+                    itemSchema.forEach(field => {
+                        const input = itemForm.querySelector(`[name="${field.id}"]`);
+                        if (input) {
+                            const value = itemData.fields[field.targetColumn];
+                            if (field.type === 'Bool') {
+                                input.checked = value === true;
+                            } else {
+                                input.value = value ?? '';
+                            }
+                        }
+                    });
+                } else { // Add Mode
+                    itemModalLabel.textContent = 'Add New Item';
+                    itemIdInput.value = '';
+                }
+                itemModal.show();
+            }
+            async function saveItem() {
+                const itemId = itemIdInput.value;
+                const isEditing = !!itemId;
+                const formData = new FormData(itemForm);
+                const fieldValues = {};
+                itemSchema.forEach(field => {
+                    if (field.type === 'Bool') {
+                        fieldValues[field.id] = formData.has(field.id);
+                    } else {
+                        fieldValues[field.id] = formData.get(field.id);
+                    }
+                });
+
+                const apiUrl = isEditing ? `/api/inventory/items/${itemId}` : `/api/inventory/${inventoryId}/items`;
+                const response = await fetch(apiUrl, {
+                    method: isEditing ? 'PUT' : 'POST',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
+                    body: JSON.stringify({ fieldValues: fieldValues })
+                });
+
+                if (response.ok) {
+                    showToast(`Item ${isEditing ? 'updated' : 'added'} successfully.`);
+                    itemModal.hide();
+                    fetchItemsAndSchema();
+                } else if (response.status === 400) {
+                    const errors = await response.json();
+
+                    itemForm.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+                    itemForm.querySelectorAll('.invalid-feedback').forEach(el => el.remove());
+
+                    for (const fieldId in errors) {
+                        const errorMessage = errors[fieldId];
+                        const input = itemForm.querySelector(`[name="${fieldId}"]`);
+                        if (input) {
+                            input.classList.add('is-invalid');
+                            const errorDiv = document.createElement('div');
+                            errorDiv.className = 'invalid-feedback';
+                            errorDiv.textContent = errorMessage;
+                            input.parentElement.appendChild(errorDiv);
+                        }
+                    }
+                    showToast('Please correct the highlighted errors.', true);
+                } else {
+                    showToast(`Failed to ${isEditing ? 'update' : 'add'} item.`, true);
+                }
+            }
             async function deleteSelectedItems() {
                 const selectedCheckboxes = document.querySelectorAll('.item-checkbox:checked');
                 const itemIds = Array.from(selectedCheckboxes).map(cb => cb.value);
@@ -456,6 +621,21 @@
             }
 
             // --- Event Handlers ---
+            document.querySelector('button[data-bs-target="#itemModal"]').addEventListener('click', () => openItemModal());
+            itemForm.addEventListener('submit', (e) => { e.preventDefault(); saveItem(); });
+
+            editSelectedItemBtn.addEventListener('click', async () => {
+                const selectedCheckbox = document.querySelector('.item-checkbox:checked');
+                if (!selectedCheckbox) return;
+
+                const response = await fetch(`/api/inventory/items/${selectedCheckbox.value}`);
+                if (!response.ok) {
+                    showToast('Error fetching item details.', true);
+                    return;
+                }
+                const itemData = await response.json();
+                openItemModal(itemData);
+            });
             deleteSelectedFieldsBtn.addEventListener('click', () => {
                 fieldsToDeleteIds = Array.from(document.querySelectorAll('input[name="selectedFieldIds"]:checked')).map(cb => cb.value);
                 if (fieldsToDeleteIds.length === 0) {
@@ -481,7 +661,6 @@
             itemsTableBody.addEventListener('change', selectionChangeHandler);
             itemsTableHead.addEventListener('change', e => { if (e.target.id === 'selectAllItemsCheckbox') { document.querySelectorAll('.item-checkbox').forEach(cb => cb.checked = e.target.checked); selectionChangeHandler(); } });
             itemsTableBody.addEventListener('click', e => { if (e.target.closest('.expandable-cell')) { const cell = e.target.closest('.expandable-cell'); viewContentModalLabel.textContent = cell.dataset.fieldName; viewContentModalBody.textContent = cell.dataset.content; viewContentModal.show(); } });
-            // Add handlers for Add/Edit item in Part 2
 
             // --- Tab Loading Logic ---
             const fieldsTabEl = document.getElementById('fields-tab');
