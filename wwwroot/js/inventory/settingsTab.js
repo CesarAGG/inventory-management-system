@@ -1,4 +1,4 @@
-function initializeAdminTab(inventoryId, inventoryName, csrfToken, currentUserId, canManageSettings) {
+function initializeSettingsTab(inventoryId, inventoryName, csrfToken, currentUserId, canManageSettings) {
     // --- RENAME LOGIC ---
     const renameInput = document.getElementById('renameInventoryInput');
     const renameBtn = document.getElementById('renameInventoryBtn');

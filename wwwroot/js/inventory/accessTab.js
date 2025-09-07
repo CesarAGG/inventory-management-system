@@ -12,6 +12,10 @@ function initializeAccessTab(inventoryId, csrfToken) {
     let searchAbortController = new AbortController();
 
     // --- FUNCTION DEFINITIONS ---
+    function getInventoryVersion() {
+        return parseInt(document.querySelector('h2[data-inventory-version]').dataset.inventoryVersion, 10);
+    }
+
     async function fetchAccessSettings() {
         try {
             const response = await fetch(`/api/inventory/${inventoryId}/access`);
@@ -46,12 +50,24 @@ function initializeAccessTab(inventoryId, csrfToken) {
 
     async function updatePublicAccess() {
         const isPublic = isPublicSwitch.checked;
+        const payload = {
+            isPublic: isPublic,
+            inventoryVersion: getInventoryVersion()
+        };
+
         try {
             const response = await fetch(`/api/inventory/${inventoryId}/access/public`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
-                body: JSON.stringify(isPublic)
+                body: JSON.stringify(payload)
             });
+
+            if (response.status === 409) {
+                window.handleConcurrencyError();
+                fetchAccessSettings(); // Re-fetch to show the current state
+                return;
+            }
+
             if (!response.ok) {
                 if (response.status === 403) {
                     showToast('Your permissions may have changed. Please reload the page.', true);
@@ -105,12 +121,24 @@ function initializeAccessTab(inventoryId, csrfToken) {
     }
 
     async function grantAccess(userId) {
+        const payload = {
+            userId: userId,
+            inventoryVersion: getInventoryVersion()
+        };
+
         try {
             const response = await fetch(`/api/inventory/${inventoryId}/access/grant`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
-                body: JSON.stringify(userId)
+                body: JSON.stringify(payload)
             });
+
+            if (response.status === 409) {
+                window.handleConcurrencyError();
+                fetchAccessSettings(); // Re-fetch to show the current state
+                return;
+            }
+
             if (!response.ok) {
                 if (response.status === 403) {
                     showToast('Your permissions may have changed. Please reload the page.', true);
@@ -139,8 +167,24 @@ function initializeAccessTab(inventoryId, csrfToken) {
         const selectedIds = Array.from(grantedUsersList.querySelectorAll('.permission-checkbox:checked')).map(cb => cb.value);
         if (selectedIds.length === 0) return;
 
+        const payload = {
+            userIds: selectedIds,
+            inventoryVersion: getInventoryVersion()
+        };
+
         try {
-            const response = await fetch(`/api/inventory/${inventoryId}/access/revoke`, { /* ... */ });
+            const response = await fetch(`/api/inventory/${inventoryId}/access/revoke`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.status === 409) {
+                window.handleConcurrencyError();
+                fetchAccessSettings(); // Re-fetch to show the current state
+                return;
+            }
+
             if (!response.ok) {
                 if (response.status === 403) {
                     showToast('Your permissions may have changed. Please reload the page.', true);
@@ -167,7 +211,7 @@ function initializeAccessTab(inventoryId, csrfToken) {
 
     userSearchInput.addEventListener('keypress', function (e) {
         if (e.key === 'Enter') {
-            e.preventDefault(); // Prevent form submission if it's in a form
+            e.preventDefault();
             searchUsers();
         }
     });
@@ -194,5 +238,4 @@ function initializeAccessTab(inventoryId, csrfToken) {
     });
 
     revokeSelectedBtn.addEventListener('click', revokeSelectedPermissions);
-
 }

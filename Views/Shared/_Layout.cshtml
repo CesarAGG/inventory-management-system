@@ -46,6 +46,24 @@
         </main>
     </div>
 
+    <!-- Concurrency Conflict Modal -->
+    <div class="modal fade" id="concurrencyModal" tabindex="-1" aria-labelledby="concurrencyModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h1 class="modal-title fs-5" id="concurrencyModalLabel">Data Conflict</h1>
+                </div>
+                <div class="modal-body">
+                    <p>The data you were working with has been modified by another user since you loaded the page.</p>
+                    <p class="text-danger">To prevent overwriting their changes, your last action was not saved. Please reload the page to get the latest version.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" id="reloadPageBtn">Reload Page</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <footer class="border-top footer text-muted">
         <div class="container">
             &copy; 2025 - InventoryManagementSystem - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
@@ -60,7 +78,13 @@
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.datatables.net/2.0.8/js/dataTables.js"></script>
     <script src="https://cdn.datatables.net/2.0.8/js/dataTables.bootstrap5.js"></script>
+    <script src="~/js/inventory/concurrencyHandler.js" asp-append-version="true"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            initializeConcurrencyHandler();
+        });
+    </script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

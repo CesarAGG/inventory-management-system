@@ -65,7 +65,8 @@ public class CustomFieldService : ICustomFieldService
         };
         _context.CustomFields.Add(customField);
 
-        // Explicitly touch the parent to ensure consistent version bumping on all schema changes.
+        // This pattern forces an update on the parent entity, which bumps the concurrency version token.
+        // It's a pragmatic way to signal that a related collection has changed without needing a version on the join table itself.
         inventory.Name = inventory.Name;
 
         try
@@ -136,8 +137,7 @@ public class CustomFieldService : ICustomFieldService
 
         fieldToUpdate.Name = fieldUpdate.Name;
 
-        // Explicitly "touch" a property on the parent Inventory to ensure EF Core's change tracker
-        // includes it in the update, which in turn causes the database to update the xmin/Version.
+        // This pattern forces an update on the parent entity, which bumps the concurrency version token.
         fieldToUpdate.Inventory.Name = fieldToUpdate.Inventory.Name;
 
         await _context.SaveChangesAsync();
@@ -196,6 +196,7 @@ public class CustomFieldService : ICustomFieldService
 
         _context.CustomFields.RemoveRange(fieldsToDelete);
 
+        // This pattern forces an update on the parent entity, which bumps the concurrency version token.
         inventory.Name = inventory.Name;
 
         try
@@ -239,7 +240,8 @@ public class CustomFieldService : ICustomFieldService
             if (field != null) field.Order = i;
         }
 
-        inventory.Name = inventory.Name; // Explicitly "touch" the parent entity
+        // This pattern forces an update on the parent entity, which bumps the concurrency version token.
+        inventory.Name = inventory.Name;
 
         await _context.SaveChangesAsync();
         await transaction.CommitAsync();

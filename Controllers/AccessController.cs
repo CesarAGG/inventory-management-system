@@ -29,15 +29,18 @@ public class AccessController : ControllerBase
         _accessService = accessService;
     }
 
-    private string GetCurrentUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+    private string? GetCurrentUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier);
     private bool IsAdmin() => User.IsInRole("Admin");
 
     [HttpGet]
     public async Task<IActionResult> GetAccessSettings(string inventoryId)
     {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId == null) return Unauthorized();
+
         var inventory = await _context.Inventories.AsNoTracking().FirstOrDefaultAsync(i => i.Id == inventoryId);
         if (inventory == null) return NotFound();
-        if (!_accessService.CanManageSettings(inventory, GetCurrentUserId(), IsAdmin())) return Forbid();
+        if (!_accessService.CanManageSettings(inventory, currentUserId, IsAdmin())) return Forbid();
 
         var permissions = await _context.InventoryUserPermissions
             .Where(p => p.InventoryId == inventoryId)
@@ -59,13 +62,21 @@ public class AccessController : ControllerBase
 
     [HttpPut("public")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SetPublic(string inventoryId, [FromBody] bool isPublic)
+    public async Task<IActionResult> SetPublic(string inventoryId, [FromBody] UpdatePublicAccessRequest request)
     {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId == null) return Unauthorized();
+
         var inventory = await _context.Inventories.FirstOrDefaultAsync(i => i.Id == inventoryId);
         if (inventory == null) return NotFound();
-        if (!_accessService.CanManageSettings(inventory, GetCurrentUserId(), IsAdmin())) return Forbid();
+        if (!_accessService.CanManageSettings(inventory, currentUserId, IsAdmin())) return Forbid();
 
-        inventory.IsPublic = isPublic;
+        if (inventory.Version != request.InventoryVersion)
+        {
+            return Conflict(new { message = "Data conflict: The inventory settings were modified by another user. Please reload and try again." });
+        }
+
+        inventory.IsPublic = request.IsPublic;
         await _context.SaveChangesAsync();
         return Ok(new { message = "Public access setting updated.", newVersion = inventory.Version });
     }
@@ -78,9 +89,12 @@ public class AccessController : ControllerBase
             return Ok(new List<UserSearchDto>());
         }
 
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId == null) return Unauthorized();
+
         var inventory = await _context.Inventories.AsNoTracking().FirstOrDefaultAsync(i => i.Id == inventoryId);
         if (inventory == null) return NotFound();
-        if (!_accessService.CanManageSettings(inventory, GetCurrentUserId(), IsAdmin())) return Forbid();
+        if (!_accessService.CanManageSettings(inventory, currentUserId, IsAdmin())) return Forbid();
 
         var usersWithPermission = await _context.InventoryUserPermissions
             .Where(p => p.InventoryId == inventoryId)
@@ -92,12 +106,10 @@ public class AccessController : ControllerBase
         IQueryable<ApplicationUser> userQuery = _userManager.Users;
         if (!IsAdmin())
         {
-            // Non-admins must provide an exact email match (case-insensitive) to prevent enumeration.
             userQuery = userQuery.Where(u => u.Email != null && u.Email.ToLower() == query.ToLower());
         }
         else
         {
-            // Admins can perform a partial "starts with" search.
             userQuery = userQuery.Where(u => u.Email != null && EF.Functions.ILike(u.Email, $"{query}%"));
         }
 
@@ -112,19 +124,27 @@ public class AccessController : ControllerBase
 
     [HttpPost("grant")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> GrantPermission(string inventoryId, [FromBody] string userId)
+    public async Task<IActionResult> GrantPermission(string inventoryId, [FromBody] GrantPermissionRequest request)
     {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId == null) return Unauthorized();
+
         var inventory = await _context.Inventories.FirstOrDefaultAsync(i => i.Id == inventoryId);
         if (inventory == null) return NotFound();
-        if (!_accessService.CanManageSettings(inventory, GetCurrentUserId(), IsAdmin())) return Forbid();
+        if (!_accessService.CanManageSettings(inventory, currentUserId, IsAdmin())) return Forbid();
 
-        var user = await _userManager.FindByIdAsync(userId);
+        if (inventory.Version != request.InventoryVersion)
+        {
+            return Conflict(new { message = "Data conflict: The inventory settings were modified by another user. Please reload and try again." });
+        }
+
+        var user = await _userManager.FindByIdAsync(request.UserId);
         if (user == null || user.Id == inventory.OwnerId)
         {
             return BadRequest("Invalid user specified.");
         }
 
-        var existingPermission = await _context.InventoryUserPermissions.FindAsync(inventoryId, userId);
+        var existingPermission = await _context.InventoryUserPermissions.FindAsync(inventoryId, request.UserId);
         if (existingPermission != null)
         {
             return Ok(new { message = "User already has permission." });
@@ -133,12 +153,14 @@ public class AccessController : ControllerBase
         var newPermission = new InventoryUserPermission
         {
             InventoryId = inventoryId,
-            UserId = userId,
+            UserId = request.UserId,
             Level = PermissionLevel.Write
         };
 
         _context.InventoryUserPermissions.Add(newPermission);
-        inventory.Name = inventory.Name; // Touch the inventory to bump its version
+        // This pattern forces an update on the parent entity, which bumps the concurrency version token.
+        // It's a pragmatic way to signal that a related collection has changed without needing a version on the join table itself.
+        inventory.Name = inventory.Name;
         await _context.SaveChangesAsync();
 
         return Ok(new UserPermissionDto { UserId = user.Id, UserEmail = user.Email!, NewInventoryVersion = inventory.Version });
@@ -146,25 +168,34 @@ public class AccessController : ControllerBase
 
     [HttpPost("revoke")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> RevokePermissions(string inventoryId, [FromBody] string[] userIds)
+    public async Task<IActionResult> RevokePermissions(string inventoryId, [FromBody] RevokePermissionsRequest request)
     {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId == null) return Unauthorized();
+
         var inventory = await _context.Inventories.FirstOrDefaultAsync(i => i.Id == inventoryId);
         if (inventory == null) return NotFound();
-        if (!_accessService.CanManageSettings(inventory, GetCurrentUserId(), IsAdmin())) return Forbid();
+        if (!_accessService.CanManageSettings(inventory, currentUserId, IsAdmin())) return Forbid();
 
-        if (userIds == null || !userIds.Any())
+        if (inventory.Version != request.InventoryVersion)
+        {
+            return Conflict(new { message = "Data conflict: The inventory settings were modified by another user. Please reload and try again." });
+        }
+
+        if (request.UserIds == null || !request.UserIds.Any())
         {
             return BadRequest("No user IDs provided.");
         }
 
         var permissions = await _context.InventoryUserPermissions
-            .Where(p => p.InventoryId == inventoryId && userIds.Contains(p.UserId))
+            .Where(p => p.InventoryId == inventoryId && request.UserIds.Contains(p.UserId))
             .ToListAsync();
 
         if (permissions.Any())
         {
             _context.InventoryUserPermissions.RemoveRange(permissions);
-            inventory.Name = inventory.Name; // Touch the inventory to bump its version
+            // This pattern forces an update on the parent entity, which bumps the concurrency version token.
+            inventory.Name = inventory.Name;
             await _context.SaveChangesAsync();
         }
 
