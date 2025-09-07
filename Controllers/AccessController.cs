@@ -67,8 +67,7 @@ public class AccessController : ControllerBase
 
         inventory.IsPublic = isPublic;
         await _context.SaveChangesAsync();
-
-        return Ok(new { message = "Public access setting updated." });
+        return Ok(new { message = "Public access setting updated.", newVersion = inventory.Version });
     }
 
     [HttpGet("search-users")]
@@ -139,9 +138,10 @@ public class AccessController : ControllerBase
         };
 
         _context.InventoryUserPermissions.Add(newPermission);
+        inventory.Name = inventory.Name; // Touch the inventory to bump its version
         await _context.SaveChangesAsync();
 
-        return Ok(new UserPermissionDto { UserId = user.Id, UserEmail = user.Email! });
+        return Ok(new UserPermissionDto { UserId = user.Id, UserEmail = user.Email!, NewInventoryVersion = inventory.Version });
     }
 
     [HttpPost("revoke")]
@@ -164,9 +164,10 @@ public class AccessController : ControllerBase
         if (permissions.Any())
         {
             _context.InventoryUserPermissions.RemoveRange(permissions);
+            inventory.Name = inventory.Name; // Touch the inventory to bump its version
             await _context.SaveChangesAsync();
         }
 
-        return Ok(new { message = "Permissions revoked successfully." });
+        return Ok(new { message = "Permissions revoked successfully.", newVersion = inventory.Version });
     }
 }

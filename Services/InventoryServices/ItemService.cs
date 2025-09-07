@@ -11,6 +11,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using InventoryManagementSystem.Services;
+using System.Linq.Dynamic.Core;
 
 namespace InventoryManagementSystem.Services.InventoryServices;
 
@@ -31,31 +32,6 @@ public class ItemService : IItemService
 
     private string GetUserId(ClaimsPrincipal user) => user.FindFirstValue(ClaimTypes.NameIdentifier)!;
     private bool IsAdmin(ClaimsPrincipal user) => user.IsInRole("Admin");
-
-    public async Task<ServiceResult<object>> GetItemsDataAsync(string inventoryId)
-    {
-        var inventoryExists = await _context.Inventories.AnyAsync(i => i.Id == inventoryId);
-        if (!inventoryExists)
-        {
-            return ServiceResult<object>.FromError(ServiceErrorType.NotFound, "Inventory not found.");
-        }
-
-        var fields = await _context.CustomFields
-            .Where(cf => cf.InventoryId == inventoryId).OrderBy(cf => cf.Order).AsNoTracking()
-            .Select(f => new { f.Id, f.Name, f.Order, f.TargetColumn, Type = f.Type.ToString() }).ToListAsync();
-
-        var items = await _context.Items.Where(i => i.InventoryId == inventoryId).AsNoTracking().ToListAsync();
-        var itemDtos = items.Select(item => new ItemDto
-        {
-            Id = item.Id,
-            CustomId = item.CustomId,
-            CreatedAt = item.CreatedAt,
-            Fields = fields.ToDictionary(field => field.TargetColumn, field => typeof(Item).GetProperty(field.TargetColumn)?.GetValue(item))
-        }).ToList();
-
-        var data = new { fields, items = itemDtos };
-        return ServiceResult<object>.Success(data);
-    }
 
     private void HydrateItemFromRequest(Item item, ItemApiRequest request, List<CustomField> fields, Dictionary<string, string> validationErrors)
     {
@@ -106,6 +82,105 @@ public class ItemService : IItemService
         }
     }
 
+    public async Task<ServiceResult<InventorySchemaViewModel>> GetInventorySchemaAsync(string inventoryId)
+    {
+        var inventoryExists = await _context.Inventories.AnyAsync(i => i.Id == inventoryId);
+        if (!inventoryExists)
+        {
+            return ServiceResult<InventorySchemaViewModel>.FromError(ServiceErrorType.NotFound, "Inventory not found.");
+        }
+
+        var schema = new InventorySchemaViewModel();
+        // Use "system" as a special marker for non-field columns
+        schema.Columns.Add(new ColumnDefinition { Title = "", Data = "id", Orderable = false, FieldId = "system_checkbox" });
+        schema.Columns.Add(new ColumnDefinition { Title = "Item ID", Data = "customId", FieldId = "system_customId" });
+        schema.Columns.Add(new ColumnDefinition { Title = "Created At", Data = "createdAt", FieldId = "system_createdAt" });
+
+        var customFields = await _context.CustomFields
+            .Where(cf => cf.InventoryId == inventoryId)
+            .OrderBy(cf => cf.Order)
+            .AsNoTracking()
+            .Select(f => new { f.Id, f.Name, f.TargetColumn, Type = f.Type.ToString() })
+            .ToListAsync();
+
+        foreach (var field in customFields)
+        {
+            schema.Columns.Add(new ColumnDefinition
+            {
+                FieldId = field.Id,
+                Title = field.Name,
+                Data = field.TargetColumn.ToLower(),
+                Type = field.Type
+            });
+        }
+
+        return ServiceResult<InventorySchemaViewModel>.Success(schema);
+    }
+
+    public async Task<ServiceResult<DataTablesResponse<Dictionary<string, object?>>>> GetItemsForDataTableAsync(string inventoryId, DataTablesRequest request)
+    {
+        var schemaResult = await GetInventorySchemaAsync(inventoryId);
+        if (!schemaResult.IsSuccess)
+        {
+            return ServiceResult<DataTablesResponse<Dictionary<string, object?>>>.FromError(schemaResult.ErrorType, schemaResult.ErrorMessage!);
+        }
+        var schema = schemaResult.Data!;
+
+        var query = _context.Items
+            .Where(i => i.InventoryId == inventoryId)
+            .AsNoTracking();
+
+        var recordsTotal = await query.CountAsync();
+
+        // Sorting
+        if (request.Order.Any())
+        {
+            var order = request.Order.First();
+            var sortDir = order.Dir?.ToLower() == "desc" ? "desc" : "asc";
+
+            if (order.Column >= 0 && order.Column < schema.Columns.Count)
+            {
+                var sortColumn = schema.Columns[order.Column].Data;
+                if (!string.IsNullOrEmpty(sortColumn) && schema.Columns[order.Column].Orderable)
+                {
+                    // Capitalize first letter to match EF Core property name
+                    var efSortColumn = char.ToUpper(sortColumn[0]) + sortColumn.Substring(1);
+                    query = query.OrderBy($"{efSortColumn} {sortDir}");
+                }
+            }
+        }
+        else
+        {
+            query = query.OrderByDescending(i => i.CreatedAt);
+        }
+
+        var pagedData = await query
+            .Skip(request.Start)
+            .Take(request.Length)
+            .Select(i => new Dictionary<string, object?>
+            {
+                { "id", i.Id },
+                { "customId", i.CustomId },
+                { "createdAt", i.CreatedAt },
+                { "customstring1", i.CustomString1 }, { "customstring2", i.CustomString2 }, { "customstring3", i.CustomString3 },
+                { "customtext1", i.CustomText1 }, { "customtext2", i.CustomText2 }, { "customtext3", i.CustomText3 },
+                { "customnumeric1", i.CustomNumeric1 }, { "customnumeric2", i.CustomNumeric2 }, { "customnumeric3", i.CustomNumeric3 },
+                { "custombool1", i.CustomBool1 }, { "custombool2", i.CustomBool2 }, { "custombool3", i.CustomBool3 },
+                { "customfileurl1", i.CustomFileUrl1 }, { "customfileurl2", i.CustomFileUrl2 }, { "customfileurl3", i.CustomFileUrl3 }
+            })
+            .ToListAsync();
+
+        var response = new DataTablesResponse<Dictionary<string, object?>>
+        {
+            Draw = request.Draw,
+            RecordsTotal = recordsTotal,
+            RecordsFiltered = recordsTotal,
+            Data = pagedData
+        };
+
+        return ServiceResult<DataTablesResponse<Dictionary<string, object?>>>.Success(response);
+    }
+
     public async Task<ServiceResult<ItemDto>> CreateItemAsync(string inventoryId, ItemApiRequest request, ClaimsPrincipal user)
     {
         const int maxRetries = 3;
@@ -139,7 +214,8 @@ public class ItemService : IItemService
                     Id = savedItem.Id,
                     CustomId = savedItem.CustomId,
                     CreatedAt = savedItem.CreatedAt,
-                    Fields = fields.ToDictionary(field => field.TargetColumn, field => typeof(Item).GetProperty(field.TargetColumn)?.GetValue(savedItem))
+                    Fields = fields.ToDictionary(field => field.TargetColumn.ToLower(), field => typeof(Item).GetProperty(field.TargetColumn)?.GetValue(savedItem)),
+                    NewInventoryVersion = inventory.Version
                 };
                 return ServiceResult<ItemDto>.Success(createdItemDto);
             }
@@ -179,7 +255,7 @@ public class ItemService : IItemService
             {
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
-                return ServiceResult<object>.Success(new { message = "OK" });
+                return ServiceResult<object>.Success(new { message = "OK", newInventoryVersion = itemToUpdate.Inventory.Version });
             }
             catch (DbUpdateConcurrencyException)
             {

@@ -27,13 +27,20 @@ function initializeAdminTab(inventoryId, inventoryName, csrfToken, currentUserId
             }
 
             const data = await response.json();
-            inventoryName = data.newName; // Update the local variable for future comparisons
+            inventoryName = data.newName;
             document.querySelector('h2').textContent = `Manage Inventory: ${escapeHtml(data.newName)}`;
+            if (deleteConfirmLabel) {
+                deleteConfirmLabel.innerHTML = `To confirm, type the name of the inventory: <strong class="text-danger">${escapeHtml(inventoryName)}</strong>`;
+            }
+            deleteConfirmInput.value = '';
+            deleteConfirmInput.dispatchEvent(new Event('input'));
+            updateInventoryVersion(data.newVersion);
             showToast('Inventory renamed successfully.');
         } catch (error) {
             showToast(error.message, true);
         }
     }
+
 
     renameBtn.addEventListener('click', renameInventory);
 
@@ -73,6 +80,7 @@ function initializeAdminTab(inventoryId, inventoryName, csrfToken, currentUserId
 
             const data = await response.json();
             showToast(data.message, false);
+            updateInventoryVersion(data.newVersion);
 
             if (data.redirectUrl) {
                 setTimeout(() => { window.location.href = data.redirectUrl; }, 2000);

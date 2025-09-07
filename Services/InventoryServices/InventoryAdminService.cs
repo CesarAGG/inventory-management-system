@@ -92,7 +92,7 @@ public class InventoryAdminService : IInventoryAdminService
             await transaction.RollbackAsync();
             return ServiceResult<object>.FromError(ServiceErrorType.Concurrency, "Data conflict: These settings were modified by another user. Please reload and try again.");
         }
-        return ServiceResult<object>.Success(new { message = "OK" });
+        return ServiceResult<object>.Success(new { message = "OK", newVersion = inventory.Version });
     }
 
     public async Task<ServiceResult<object>> RenameInventoryAsync(string inventoryId, RenameInventoryRequest request, ClaimsPrincipal user)
@@ -114,8 +114,7 @@ public class InventoryAdminService : IInventoryAdminService
             await transaction.RollbackAsync();
             return ServiceResult<object>.FromError(ServiceErrorType.Concurrency, "Data conflict: This inventory was modified by another user. Please reload and try again.");
         }
-
-        return ServiceResult<object>.Success(new { newName = inventory.Name });
+        return ServiceResult<object>.Success(new { newName = inventory.Name, newVersion = inventory.Version });
     }
 
     public async Task<ServiceResult<TransferOwnershipResponse>> TransferOwnershipAsync(string inventoryId, TransferOwnershipRequest request, ClaimsPrincipal user)
@@ -159,6 +158,7 @@ public class InventoryAdminService : IInventoryAdminService
             Message = $"Ownership successfully transferred to {newOwner.Email}.",
             ShouldRedirect = shouldRedirect
         };
+        resultData.NewInventoryVersion = inventory.Version;
         return ServiceResult<TransferOwnershipResponse>.Success(resultData);
     }
 

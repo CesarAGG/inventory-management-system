@@ -2,118 +2,110 @@
     if (document.getElementById('itemsDataTable')?.getAttribute('data-initialized')) return;
     document.getElementById('itemsDataTable')?.setAttribute('data-initialized', 'true');
 
-    // --- CONSTANTS ---
+    const itemsTable = document.getElementById('itemsDataTable');
     const itemsTableHead = document.getElementById('items-table-head');
     const itemsTableBody = document.getElementById('items-table-body');
     const viewContentModal = new bootstrap.Modal(document.getElementById('viewContentModal'));
     const viewContentModalLabel = document.getElementById('viewContentModalLabel');
     const viewContentModalBody = document.getElementById('viewContentModalBody');
-    let itemSchema = [];
     let itemsDataTable = null;
+    let localItemSchema = [];
+    let dtColumnSchema = []; 
 
-    // --- FUNCTION DEFINITIONS ---
-    async function fetchItemsAndSchema() {
+    function destroyDataTable() {
+        if (itemsDataTable) {
+            itemsDataTable.destroy();
+            itemsDataTable = null;
+        }
+        itemsTableHead.innerHTML = '';
+        itemsTableBody.innerHTML = '';
+    }
+
+    async function initializePage() {
         try {
-            const response = await fetch(`/api/inventory/${inventoryId}/items-data`);
-            if (!response.ok) throw new Error('Failed to load items data.');
-            const data = await response.json();
-            itemSchema = data.fields;
+            const schemaResponse = await fetch(`/api/inventory/${inventoryId}/schema`);
+            if (!schemaResponse.ok) throw new Error('Failed to load inventory schema.');
+
+            const schemaData = await schemaResponse.json();
+            dtColumnSchema = schemaData.columns;
+
             if (canWrite) {
-                buildItemModalForm(itemSchema);
+                localItemSchema = dtColumnSchema
+                    .filter(c => !c.fieldId.startsWith('system_'))
+                    .map(c => ({
+                        id: c.fieldId,
+                        name: c.title,
+                        type: c.type,
+                        dataKey: c.data.toLowerCase()
+                    }));
+                buildItemModalForm(localItemSchema);
             }
-            renderItemsUI(itemSchema, data.items);
+            initializeDataTable(dtColumnSchema);
+
         } catch (error) {
             showToast(error.message, true);
             itemsTableHead.innerHTML = '<tr><th>Error</th></tr>';
-            itemsTableBody.innerHTML = `<tr><td>Could not load item data.</td></tr>`;
         }
     }
 
-    function convertItemToRowDataArray(item, fields) {
-        // This object will be passed to the 'Created At' column's render function.
-        const createdAtData = {
-            display: new Date(item.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
-            sort: new Date(item.createdAt).getTime()
-        };
+    function initializeDataTable(columnsSchema) {
+        destroyDataTable();
 
-        // This object will be passed to the 'Item ID' column's render function.
-        const idCellData = {
-            id: item.id,
-            display: item.customId ? (item.customId.length > 12 ? `${item.customId.substring(0, 12)}...` : item.customId) : `${item.id.substring(0, 8)}...`,
-            full: item.customId || `System ID: ${item.id}`,
-            isCustom: !!item.customId
-        };
+        const headersHtml = `<tr>` + columnsSchema.map(col => {
+            const fieldName = escapeHtml(col.title);
+            if (fieldName.length > 35) {
+                return `<th title="${fieldName}">${fieldName.substring(0, 32)}<span class="unselectable">...</span></th>`;
+            }
+            return `<th>${fieldName}</th>`;
+        }).join('') + `</tr>`;
 
-        const rowData = [
-            idCellData, // Checkbox column will use the ID from this object
-            idCellData,
-            createdAtData
-        ];
-
-        fields.forEach(f => {
-            rowData.push(item.fields[f.targetColumn] ?? '');
-        });
-
-        return rowData;
-    }
-
-    function renderItemsUI(fields, items) {
-        if (itemsDataTable) {
-            itemsDataTable.destroy();
-        }
-
-        let headersHtml = `<tr><th style="width: 50px;"><input class="form-check-input" type="checkbox" id="selectAllItemsCheckbox" /></th>
-                               <th>Item ID</th>
-                               <th style="width: 180px;">Created At</th>`;
-
-        fields.forEach(f => {
-            const fieldName = escapeHtml(f.name);
-            const headerText = fieldName.length > 35 ? `${fieldName.substring(0, 32)}<span class="unselectable">...</span>` : fieldName;
-            headersHtml += `<th title="${fieldName}">${headerText}</th>`;
-        });
-        itemsTableHead.innerHTML = headersHtml + `</tr>`;
-        itemsTableBody.innerHTML = '';
-
-        const tableData = items.map(item => convertItemToRowDataArray(item, fields));
+        itemsTableHead.innerHTML = headersHtml.replace('<th></th>', '<th style="width: 50px;"><input class="form-check-input" type="checkbox" id="selectAllItemsCheckbox" /></th>');
 
         itemsDataTable = new DataTable('#itemsDataTable', {
-            data: tableData,
-            order: [[2, 'desc']],
-            columnDefs: [
-                { // Checkbox
-                    targets: 0, orderable: false,
-                    render: (data) => `<input class="form-check-input item-checkbox" type="checkbox" name="selectedItemIds" value="${escapeHtml(data.id)}" />`
+            "processing": true,
+            "serverSide": true,
+            "ajax": {
+                "url": `/api/inventory/${inventoryId}/items-data`,
+                "type": "POST",
+                "dataType": "json",
+                "error": function () {
+                    if ($.fn.DataTable.isDataTable('#itemsDataTable')) {
+                        showToast('An error occurred while loading item data.', true);
+                    }
+                }
+            },
+            "columns": columnsSchema.map(c => ({ "data": c.data })),
+            "order": [[2, 'desc']],
+            "columnDefs": [
+                {
+                    targets: 0,
+                    orderable: false,
+                    render: (data) => `<input class="form-check-input item-checkbox" type="checkbox" name="selectedItemIds" value="${escapeHtml(data)}" />`
                 },
-                { // Item ID
+                {
                     targets: 1,
-                    render: (data) => {
-                        const classes = data.isCustom ? 'font-monospace' : 'font-monospace text-muted';
-                        return `<div class="expandable-cell" data-field-name="Item ID" data-content="${escapeHtml(data.full)}"><span class="truncated-text ${classes}" title="${escapeHtml(data.full)}">${escapeHtml(data.display)}</span></div>`;
+                    render: (data, type, row) => {
+                        const fullId = data || `System ID: ${row.id}`;
+                        const displayId = data ? (data.length > 12 ? `${data.substring(0, 12)}...` : data) : `${row.id.substring(0, 8)}...`;
+                        const classes = data ? 'font-monospace' : 'font-monospace text-muted';
+                        return `<div class="expandable-cell" data-field-name="Item ID" data-content="${escapeHtml(fullId)}"><span class="truncated-text ${classes}" title="${escapeHtml(fullId)}">${escapeHtml(displayId)}</span></div>`;
                     }
                 },
-                { // Created At
+                {
                     targets: 2,
-                    render: (data, type) => type === 'sort' ? data.sort : data.display
+                    render: (data) => new Date(data).toLocaleString()
                 },
-                ...fields.map((f, i) => ({
+                ...columnsSchema.slice(3).map((col, i) => ({
                     targets: i + 3,
-                    render: function (data, type, row) {
-                        let display = '';
+                    render: function (data) {
                         const stringValue = String(data ?? '');
-                        let cellClass = '';
-
-                        if (f.type === 'Bool') {
-                            display = data === true ? '✔️' : '❌';
-                        } else if (stringValue.length > 35) {
-                            display = `<span class="truncated-text">${escapeHtml(stringValue.substring(0, 32))}<span class="unselectable">...</span></span>`;
-                            // This class enables the modal popup for long text.
-                            cellClass = 'expandable-cell';
-                        } else {
-                            display = escapeHtml(stringValue);
+                        if (col.type === 'Bool') {
+                            return data === true ? '✔️' : '❌';
                         }
-
-                        // This wrapper div with data attributes is essential.
-                        return `<div class="${cellClass}" data-field-name="${escapeHtml(f.name)}" data-content="${escapeHtml(stringValue)}">${display}</div>`;
+                        if (stringValue.length > 35) {
+                            return `<div class="expandable-cell" data-field-name="${escapeHtml(col.title)}" data-content="${escapeHtml(stringValue)}"><span class="truncated-text">${escapeHtml(stringValue.substring(0, 32))}<span class="unselectable">...</span></span></div>`;
+                        }
+                        return escapeHtml(stringValue);
                     }
                 }))
             ]
@@ -138,11 +130,8 @@
         itemModalBody.innerHTML = formHtml;
     }
 
-    // --- EVENT LISTENERS ---
-    const dtElement = document.getElementById('itemsDataTable');
-
-    if (dtElement) {
-        dtElement.addEventListener('click', e => {
+    if (itemsTable) {
+        itemsTable.addEventListener('click', e => {
             if (e.target.closest('.expandable-cell')) {
                 const cell = e.target.closest('.expandable-cell');
                 viewContentModalLabel.textContent = cell.dataset.fieldName;
@@ -153,7 +142,6 @@
     }
 
     if (canWrite) {
-        // --- CONSTANTS (Write Permissions Only) ---)
         const itemForm = document.getElementById('itemForm');
         const itemModalEl = document.getElementById('itemModal');
         const itemModal = new bootstrap.Modal(itemModalEl);
@@ -164,20 +152,18 @@
         const deleteItemsModal = new bootstrap.Modal(document.getElementById('deleteItemsConfirmModal'));
         const confirmDeleteItemsBtn = document.getElementById('confirmDeleteItemsBtn');
 
-        // --- FUNCTIONS (Write Permissions Only) ---
         function openItemModal(itemData = null) {
             itemForm.reset();
             itemForm.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
             itemForm.querySelectorAll('.invalid-feedback').forEach(el => el.remove());
 
-            if (itemData) { // Edit Mode
+            if (itemData) {
                 itemModalLabel.textContent = 'Edit Item';
                 itemIdInput.value = itemData.id;
-
-                itemSchema.forEach(field => {
+                localItemSchema.forEach(field => {
                     const input = itemForm.querySelector(`[name="${field.id}"]`);
                     if (input) {
-                        const value = itemData.fields[field.targetColumn];
+                        const value = itemData[field.dataKey];
                         if (field.type === 'Bool') {
                             input.checked = value === true;
                         } else {
@@ -185,7 +171,7 @@
                         }
                     }
                 });
-            } else { // Add Mode
+            } else {
                 itemModalLabel.textContent = 'Add New Item';
                 itemIdInput.value = '';
             }
@@ -197,7 +183,7 @@
             const isEditing = !!itemId;
             const formData = new FormData(itemForm);
             const fieldValues = {};
-            itemSchema.forEach(field => {
+            localItemSchema.forEach(field => {
                 if (field.type === 'Bool') {
                     fieldValues[field.id] = formData.has(field.id);
                 } else {
@@ -216,14 +202,16 @@
             if (response.ok) {
                 showToast(`Item ${isEditing ? 'updated' : 'added'} successfully.`);
                 itemModal.hide();
-                fetchItemsAndSchema();
+
+                const result = await response.json();
+                updateInventoryVersion(result.newInventoryVersion);
+
+                itemsDataTable.ajax.reload(null, false);
             }
             else if (response.status === 400) {
                 const errors = await response.json();
-
                 itemForm.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
                 itemForm.querySelectorAll('.invalid-feedback').forEach(el => el.remove());
-
                 for (const fieldId in errors) {
                     const errorMessage = errors[fieldId];
                     const input = itemForm.querySelector(`[name="${fieldId}"]`);
@@ -250,55 +238,39 @@
                 body: JSON.stringify(itemIds)
             });
             deleteItemsModal.hide();
-            if (response.ok) { showToast('Selected items deleted.', false); fetchItemsAndSchema(); }
+            if (response.ok) {
+                showToast('Selected items deleted.', false);
+                itemsDataTable.ajax.reload(null, false);
+            }
             else { showToast('Failed to delete items.', true); }
         }
 
         const selectionChangeHandler = () => {
             const selectedCount = document.querySelectorAll('.item-checkbox:checked').length;
+            editSelectedItemBtn.disabled = selectedCount !== 1;
             if (selectedCount === 1) {
-                editSelectedItemBtn.disabled = false;
-                editSelectedItemBtn.classList.remove('btn-outline-secondary');
-                editSelectedItemBtn.classList.add('btn-secondary'); // A more vibrant, solid color
+                editSelectedItemBtn.classList.replace('btn-outline-secondary', 'btn-secondary');
             } else {
-                editSelectedItemBtn.disabled = true;
-                editSelectedItemBtn.classList.remove('btn-secondary');
-                editSelectedItemBtn.classList.add('btn-outline-secondary');
+                editSelectedItemBtn.classList.replace('btn-secondary', 'btn-outline-secondary');
             }
         };
 
-        // --- EVENT LISTENERS (Write Permissions Only) ---
         document.querySelector('button[data-bs-target="#itemModal"]').addEventListener('click', () => openItemModal());
-
         itemForm.addEventListener('submit', (e) => { e.preventDefault(); saveItem(); });
 
         editSelectedItemBtn.addEventListener('click', () => {
             const selectedCheckbox = document.querySelector('.item-checkbox:checked');
-            if (!selectedCheckbox || !itemsDataTable) return;
+            if (!selectedCheckbox) return;
 
-            // Find the row node for the checked box to get its index
             const rowNode = selectedCheckbox.closest('tr');
             if (!rowNode) return;
-            const rowIndex = itemsDataTable.row(rowNode).index();
-            const rowData = itemsDataTable.row(rowIndex).data();
 
+            const rowData = itemsDataTable.row(rowNode).data();
             if (!rowData) {
                 showToast('Could not find data for the selected item.', true);
                 return;
             }
-
-            // Reconstruct the itemData object in the format openItemModal expects
-            const itemData = {
-                id: rowData[0].id,
-                fields: {}
-            };
-
-            itemSchema.forEach((field, index) => {
-                // Data for custom fields starts at index 3 in the rowData array
-                itemData.fields[field.targetColumn] = rowData[index + 3];
-            });
-
-            openItemModal(itemData);
+            openItemModal(rowData);
         });
 
         deleteSelectedItemsBtn.addEventListener('click', () => {
@@ -308,13 +280,12 @@
             }
             deleteItemsModal.show();
         });
-
         confirmDeleteItemsBtn.addEventListener('click', deleteSelectedItems);
 
-        if (dtElement) {
-            dtElement.addEventListener('change', (e) => {
+        if (itemsTable) {
+            itemsTable.addEventListener('change', (e) => {
                 if (e.target.id === 'selectAllItemsCheckbox') {
-                    dtElement.querySelectorAll('.item-checkbox').forEach(cb => cb.checked = e.target.checked);
+                    itemsTable.querySelectorAll('.item-checkbox').forEach(cb => cb.checked = e.target.checked);
                 }
                 if (e.target.matches('.item-checkbox, #selectAllItemsCheckbox')) {
                     selectionChangeHandler();
@@ -324,9 +295,9 @@
     }
 
     document.addEventListener('refreshItemsData', function () {
-        fetchItemsAndSchema();
+        destroyDataTable();
+        initializePage();
     });
 
-    // --- INITIALIZATION ---
-    fetchItemsAndSchema();
+    initializePage();
 }

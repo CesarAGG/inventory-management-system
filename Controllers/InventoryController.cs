@@ -151,7 +151,7 @@ public class InventoryController : Controller
             return HandleServiceResult(result);
         }
         var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-        var jsonString = JsonSerializer.Serialize(result.Data, options);
+        var jsonString = JsonSerializer.Serialize((IEnumerable<object>)result.Data!, options);
         return Content(jsonString, "application/json");
     }
 
@@ -166,10 +166,19 @@ public class InventoryController : Controller
 
     [HttpGet]
     [AllowAnonymous]
-    [Route("api/inventory/{inventoryId}/items-data")]
-    public async Task<IActionResult> GetItemsData(string inventoryId)
+    [Route("api/inventory/{inventoryId}/schema")]
+    public async Task<IActionResult> GetInventorySchema(string inventoryId)
     {
-        var result = await _itemService.GetItemsDataAsync(inventoryId);
+        var result = await _itemService.GetInventorySchemaAsync(inventoryId);
+        return HandleServiceResult(result);
+    }
+
+    [HttpPost]
+    [AllowAnonymous]
+    [Route("api/inventory/{inventoryId}/items-data")]
+    public async Task<IActionResult> LoadItemsForDataTable(string inventoryId, [FromForm] DataTablesRequest request)
+    {
+        var result = await _itemService.GetItemsForDataTableAsync(inventoryId, request);
         return HandleServiceResult(result);
     }
 
@@ -183,7 +192,7 @@ public class InventoryController : Controller
         {
             return HandleServiceResult(result);
         }
-        return CreatedAtAction(nameof(GetItemsData), new { inventoryId }, result.Data);
+        return Ok(result.Data);
     }
 
     [HttpPost]
@@ -225,8 +234,9 @@ public class InventoryController : Controller
         {
             return HandleServiceResult(result);
         }
+
         var redirectUrl = result.Data!.ShouldRedirect ? Url.Action("Index", "User") : null;
-        return Ok(new { message = result.Data.Message, redirectUrl });
+        return Ok(new { message = result.Data.Message, redirectUrl, newVersion = result.Data.NewInventoryVersion });
     }
 
     [HttpDelete]
@@ -246,9 +256,10 @@ public class InventoryController : Controller
         if (inventory == null) return NotFound();
 
         var currentUserId = _userManager.GetUserId(User);
-        bool isOwnerOrAdmin = !string.IsNullOrEmpty(currentUserId) && _accessService.CanManageSettings(inventory, currentUserId, User.IsInRole("Admin"));
+        bool isAdmin = User.IsInRole("Admin");
+        bool canManageSettings = !string.IsNullOrEmpty(currentUserId) && _accessService.CanManageSettings(inventory, currentUserId, isAdmin);
 
-        if (isOwnerOrAdmin)
+        if (canManageSettings)
         {
             ViewData["CanManageSettings"] = true;
             ViewData["CanWrite"] = true;
@@ -257,8 +268,10 @@ public class InventoryController : Controller
         }
         else
         {
-            bool canWrite = !string.IsNullOrEmpty(currentUserId) && await _accessService.CanWrite(inventory, currentUserId, User.IsInRole("Admin"));
-            ViewData["CanWrite"] = canWrite;
+            bool canWriteItems = !string.IsNullOrEmpty(currentUserId) && await _accessService.CanWrite(inventory, currentUserId, isAdmin);
+            ViewData["CanManageSettings"] = false;
+            ViewData["CanWrite"] = canWriteItems;
+            ViewData["CurrentUserId"] = currentUserId;
             return View("View", inventory);
         }
     }

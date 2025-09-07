@@ -140,7 +140,11 @@ function initializeCustomIdTab(inventoryId, csrfToken) {
             headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
             body: JSON.stringify(currentIdFormat)
         });
-        if (response.ok) { showToast('ID format saved successfully.'); }
+        if (response.ok) {
+            showToast('ID format saved successfully.');
+            const result = await response.json();
+            updateInventoryVersion(result.newVersion);
+        }
         else { showToast('Failed to save ID format.', true); }
     }
 

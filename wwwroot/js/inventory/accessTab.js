@@ -53,6 +53,8 @@ function initializeAccessTab(inventoryId, csrfToken) {
                 body: JSON.stringify(isPublic)
             });
             if (!response.ok) throw new Error('Failed to update setting.');
+            const result = await response.json();
+            updateInventoryVersion(result.newVersion);
             showToast('Public access updated successfully.');
         } catch (error) {
             showToast(error.message, true);
@@ -102,7 +104,8 @@ function initializeAccessTab(inventoryId, csrfToken) {
                 body: JSON.stringify(userId)
             });
             if (!response.ok) throw new Error('Failed to grant access.');
-
+            const result = await response.json();
+            updateInventoryVersion(result.newInventoryVersion); 
             fetchAccessSettings();
             userSearchInput.value = '';
             userSearchResults.innerHTML = '';
@@ -128,7 +131,8 @@ function initializeAccessTab(inventoryId, csrfToken) {
                 body: JSON.stringify(selectedIds)
             });
             if (!response.ok) throw new Error('Failed to revoke access.');
-
+            const result = await response.json();
+            updateInventoryVersion(result.newVersion);
             fetchAccessSettings();
             showToast('Access revoked successfully.');
         } catch (error) {

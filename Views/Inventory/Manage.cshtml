@@ -4,7 +4,7 @@
     ViewData["Title"] = "Manage Inventory: " + Model.Name;
 }
 
-<h2>@ViewData["Title"]</h2>
+<h2 data-inventory-version="@Model.Version">@ViewData["Title"]</h2>
 
 <div>
     <a asp-action="Index" asp-controller="Home">Back to Home</a>
@@ -237,7 +237,7 @@
                             <div class="card-body">
                                 <p class="card-text">Once you delete an inventory, there is no going back. All items, custom fields, and access permissions associated with it will be permanently deleted.</p>
                                 <div class="form-group">
-                                    <label for="deleteConfirmInput" class="form-label">To confirm, type the name of the inventory: <strong class="text-danger">@Model.Name</strong></label>
+                                    <label for="deleteConfirmInput" id="deleteConfirmLabel" class="form-label">To confirm, type the name of the inventory: <strong class="text-danger">@Model.Name</strong></label>
                                     <input type="text" id="deleteConfirmInput" class="form-control mb-2" autocomplete="off">
                                     <button id="deleteInventoryBtn" class="btn btn-danger w-100" disabled>Delete this Inventory</button>
                                 </div>

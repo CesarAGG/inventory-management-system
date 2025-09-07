@@ -89,8 +89,16 @@ public class CustomFieldService : ICustomFieldService
         if (!_accessService.CanManageSettings(inventory, GetUserId(user), IsAdmin(user))) return ServiceResult<List<CustomFieldDto>>.FromError(ServiceErrorType.Forbidden, "Forbidden.");
 
         var fields = await _context.CustomFields
-            .Where(cf => cf.InventoryId == inventoryId).OrderBy(cf => cf.Order)
-            .Select(cf => new CustomFieldDto { Id = cf.Id, Name = cf.Name, Type = cf.Type.ToString() }).ToListAsync();
+            .Where(cf => cf.InventoryId == inventoryId)
+            .OrderBy(cf => cf.Order)
+            .Select(cf => new CustomFieldDto
+            {
+                Id = cf.Id,
+                Name = cf.Name,
+                Type = cf.Type.ToString(),
+                DataKey = cf.TargetColumn
+            })
+            .ToListAsync();
         return ServiceResult<List<CustomFieldDto>>.Success(fields);
     }
 

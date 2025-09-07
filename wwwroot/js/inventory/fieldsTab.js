@@ -31,15 +31,15 @@ function initializeFieldsTab(inventoryId, csrfToken) {
             headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
             body: JSON.stringify({ name: name, type: type })
         });
-        if (response.ok) {
-            document.dispatchEvent(new Event('refreshItemsData'));
 
+        if (response.ok) {
             newFieldNameInput.value = '';
             showToast('Field added successfully.');
             fetchFields();
+            document.dispatchEvent(new Event('refreshItemsData')); // Refresh items table
         } else {
-            const errorText = await response.text();
-            showToast(`Failed to add field: ${errorText}`, true);
+            const error = await response.json().catch(() => ({ message: 'Failed to add field.' }));
+            showToast(error.message, true);
         }
     }
 
@@ -63,8 +63,6 @@ function initializeFieldsTab(inventoryId, csrfToken) {
         deleteFieldModal.hide();
 
         if (!response.ok) {
-            // NOTE: The real `handleConcurrencyError` will be added in Part 3.
-            // For now, we just handle the error with a standard toast.
             const error = await response.json().catch(() => ({ message: 'Failed to delete selected fields.' }));
             showToast(error.message, true);
             fieldsToDeleteIds = [];
@@ -72,15 +70,13 @@ function initializeFieldsTab(inventoryId, csrfToken) {
         }
 
         const result = await response.json();
-        document.dispatchEvent(new Event('refreshItemsData'));
         showToast('Selected fields deleted successfully.');
-
-        // Correctly parse the response: the controller returns the Data object directly.
         if (result.newVersion && versionElement) {
             versionElement.dataset.inventoryVersion = result.newVersion;
         }
-        fetchFields();
 
+        fetchFields();
+        document.dispatchEvent(new Event('refreshItemsData')); // Refresh items table
         fieldsToDeleteIds = [];
     }
 
@@ -106,10 +102,9 @@ function initializeFieldsTab(inventoryId, csrfToken) {
                 versionElement.dataset.inventoryVersion = result.newVersion;
             }
             fetchFields();
-        } else if (response.status === 409) {
-            showToast(result.message, true);
+            document.dispatchEvent(new Event('refreshItemsData')); // Refresh items table
         } else {
-            showToast('Failed to rename field.', true);
+            showToast(result.message || 'Failed to rename field.', true);
         }
     }
 
@@ -119,7 +114,7 @@ function initializeFieldsTab(inventoryId, csrfToken) {
 
         if (!inventoryVersion) {
             showToast('Could not find inventory version. Cannot save order.', true);
-            fetchFields(); // Revert visual drag-and-drop on error
+            fetchFields();
             return;
         }
 
@@ -134,9 +129,11 @@ function initializeFieldsTab(inventoryId, csrfToken) {
             if (result.newVersion && versionElement) {
                 versionElement.dataset.inventoryVersion = result.newVersion;
             }
+            // A reorder also changes the schema, so refresh the items table
+            document.dispatchEvent(new Event('refreshItemsData'));
         } else {
             showToast(result.message || 'Failed to save new order.', true);
-            fetchFields(); // Revert the UI to match the server state on failure
+            fetchFields();
         }
     }
 
