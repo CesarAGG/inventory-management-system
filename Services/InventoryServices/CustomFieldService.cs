@@ -113,28 +113,50 @@ public class CustomFieldService : ICustomFieldService
         if (fieldIds == null || !fieldIds.Any()) return new { message = "No field IDs provided." };
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
-        var fieldsToDelete = await _context.CustomFields.Where(cf => fieldIds.Contains(cf.Id)).Include(cf => cf.Inventory).ToListAsync();
+        var fieldsToDelete = await _context.CustomFields
+            .Where(cf => fieldIds.Contains(cf.Id))
+            .Include(cf => cf.Inventory)
+            .ToListAsync();
+
         if (!fieldsToDelete.Any()) return null;
 
         var inventory = fieldsToDelete.First().Inventory;
         if (inventory == null || fieldsToDelete.Any(f => f.InventoryId != inventory.Id))
             return new { message = "All fields must belong to the same inventory." };
 
-        if (!_accessService.CanManageSettings(inventory, GetUserId(user), IsAdmin(user))) return new { message = "Forbidden." };
+        if (!_accessService.CanManageSettings(inventory, GetUserId(user), IsAdmin(user)))
+            return new { message = "Forbidden." };
 
         foreach (var field in fieldsToDelete)
         {
-            var itemsToUpdate = await _context.Items.Where(i => i.InventoryId == field.InventoryId).ToListAsync();
-            foreach (var item in itemsToUpdate)
+            var itemsInInventory = _context.Items.Where(i => i.InventoryId == field.InventoryId);
+            switch (field.Type)
             {
-                var propInfo = typeof(Item).GetProperty(field.TargetColumn);
-                propInfo?.SetValue(item, null);
+                case CustomFieldType.String:
+                case CustomFieldType.Text:
+                case CustomFieldType.FileUrl:
+                    await itemsInInventory.ExecuteUpdateAsync(s => s.SetProperty(
+                        i => EF.Property<string?>(i, field.TargetColumn),
+                        (string?)null));
+                    break;
+                case CustomFieldType.Numeric:
+                    await itemsInInventory.ExecuteUpdateAsync(s => s.SetProperty(
+                        i => EF.Property<decimal?>(i, field.TargetColumn),
+                        (decimal?)null));
+                    break;
+                case CustomFieldType.Bool:
+                    await itemsInInventory.ExecuteUpdateAsync(s => s.SetProperty(
+                        i => EF.Property<bool?>(i, field.TargetColumn),
+                        (bool?)null));
+                    break;
             }
         }
+
         _context.CustomFields.RemoveRange(fieldsToDelete);
         await _context.SaveChangesAsync();
         await transaction.CommitAsync();
-        return null;
+
+        return null; // Success
     }
 
     public async Task<object?> ReorderCustomFieldsAsync(string inventoryId, string[] orderedFieldIds, ClaimsPrincipal user)

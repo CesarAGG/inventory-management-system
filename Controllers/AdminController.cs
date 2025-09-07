@@ -11,12 +11,6 @@ using Npgsql;
 
 namespace InventoryManagementSystem.Controllers;
 
-public class UserViewModel
-{
-    public ApplicationUser User { get; set; } = new();
-    public IList<string> Roles { get; set; } = new List<string>();
-}
-
 [Authorize(Roles = "Admin")]
 public class AdminController : Controller
 {
@@ -137,13 +131,18 @@ public class AdminController : Controller
 
     private async Task UpdateUserBlockStatus(string[] userIds, bool isBlocked)
     {
-        var usersToUpdate = await GetUsersByIdsAsync(userIds);
+        if (userIds == null || !userIds.Any()) return;
+
+        await _userManager.Users
+            .Where(u => userIds.Contains(u.Id))
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.IsBlocked, isBlocked));
+
+        var usersToUpdate = await _userManager.Users
+            .Where(u => userIds.Contains(u.Id))
+            .ToListAsync();
 
         foreach (var user in usersToUpdate)
         {
-            user.IsBlocked = isBlocked;
-            await _userManager.UpdateAsync(user);
-            // After updating the user, this invalidates their security stamp, forcing a logout on their next request
             await _userManager.UpdateSecurityStampAsync(user);
         }
     }
