@@ -127,6 +127,7 @@ public class InventoryAdminService : IInventoryAdminService
 
         var newOwner = await _userManager.FindByEmailAsync(request.NewOwnerEmail);
         if (newOwner == null) return ServiceResult<object>.FromError(ServiceErrorType.InvalidInput, "The specified user does not exist.");
+        if (newOwner.IsBlocked) return ServiceResult<object>.FromError(ServiceErrorType.InvalidInput, "Cannot transfer ownership to a blocked user.");
         if (newOwner.Id == inventory.OwnerId) return ServiceResult<object>.FromError(ServiceErrorType.InvalidInput, "This user is already the owner.");
 
         bool shouldRedirect = !IsAdmin(user);
