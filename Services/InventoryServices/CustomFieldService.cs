@@ -27,20 +27,20 @@ public class CustomFieldService : ICustomFieldService
     private string GetUserId(ClaimsPrincipal user) => user.FindFirstValue(ClaimTypes.NameIdentifier)!;
     private bool IsAdmin(ClaimsPrincipal user) => user.IsInRole("Admin");
 
-    public async Task<(CustomFieldDto? Field, object? Error)> AddCustomFieldAsync(string inventoryId, CustomFieldDto newField, ClaimsPrincipal user)
+    public async Task<ServiceResult<CustomFieldDto>> AddCustomFieldAsync(string inventoryId, CustomFieldDto newField, ClaimsPrincipal user)
     {
         await using var transaction = await _context.Database.BeginTransactionAsync();
         var inventory = await _context.Inventories.FirstOrDefaultAsync(i => i.Id == inventoryId);
-        if (inventory == null) return (null, new { message = "Inventory not found." });
-        if (!_accessService.CanManageSettings(inventory, GetUserId(user), IsAdmin(user))) return (null, new { message = "Forbidden." });
+        if (inventory == null) return ServiceResult<CustomFieldDto>.FromError(ServiceErrorType.NotFound, "Inventory not found.");
+        if (!_accessService.CanManageSettings(inventory, GetUserId(user), IsAdmin(user))) return ServiceResult<CustomFieldDto>.FromError(ServiceErrorType.Forbidden, "Forbidden.");
 
         if (string.IsNullOrWhiteSpace(newField.Name) || !Enum.TryParse<CustomFieldType>(newField.Type, out var fieldType))
-            return (null, new { message = "Invalid field name or type." });
+            return ServiceResult<CustomFieldDto>.FromError(ServiceErrorType.InvalidInput, "Invalid field name or type.");
 
         var existingFields = await _context.CustomFields.Where(cf => cf.InventoryId == inventoryId && cf.Type == fieldType).ToListAsync();
         const int maxFieldsPerType = 3;
         if (existingFields.Count >= maxFieldsPerType)
-            return (null, new { message = $"Cannot add another field of type '{fieldType}'. Maximum of {maxFieldsPerType} reached." });
+            return ServiceResult<CustomFieldDto>.FromError(ServiceErrorType.InvalidInput, $"Cannot add another field of type '{fieldType}'. Maximum of {maxFieldsPerType} reached.");
 
         string targetColumn = "";
         for (int i = 1; i <= maxFieldsPerType; i++)
@@ -53,7 +53,7 @@ public class CustomFieldService : ICustomFieldService
             }
         }
 
-        if (string.IsNullOrEmpty(targetColumn)) return (null, new { message = "Could not find an available column for this field type." });
+        if (string.IsNullOrEmpty(targetColumn)) return ServiceResult<CustomFieldDto>.FromError(ServiceErrorType.General, "Could not find an available column for this field type.");
 
         var customField = new CustomField
         {
@@ -73,25 +73,25 @@ public class CustomFieldService : ICustomFieldService
         catch (DbUpdateException ex)
         {
             if (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
-                return (null, new { message = "A field with the same properties was created simultaneously. Please try again." });
+                return ServiceResult<CustomFieldDto>.FromError(ServiceErrorType.Concurrency, "A field with the same properties was created simultaneously. Please try again.");
             _logger.LogError(ex, "Database error while adding custom field for inventory {InventoryId}", inventoryId);
-            return (null, new { message = "A database error occurred. Please check your input (e.g., field name is not too long)." });
+            return ServiceResult<CustomFieldDto>.FromError(ServiceErrorType.General, "A database error occurred. Please check your input (e.g., field name is not too long).");
         }
 
         var resultDto = new CustomFieldDto { Id = customField.Id, Name = customField.Name, Type = customField.Type.ToString() };
-        return (resultDto, null);
+        return ServiceResult<CustomFieldDto>.Success(resultDto);
     }
 
-    public async Task<(List<CustomFieldDto>? Fields, object? Error)> GetCustomFieldsAsync(string inventoryId, ClaimsPrincipal user)
+    public async Task<ServiceResult<List<CustomFieldDto>>> GetCustomFieldsAsync(string inventoryId, ClaimsPrincipal user)
     {
         var inventory = await _context.Inventories.AsNoTracking().FirstOrDefaultAsync(i => i.Id == inventoryId);
-        if (inventory == null) return (null, new { message = "Inventory not found." });
-        if (!_accessService.CanManageSettings(inventory, GetUserId(user), IsAdmin(user))) return (null, new { message = "Forbidden." });
+        if (inventory == null) return ServiceResult<List<CustomFieldDto>>.FromError(ServiceErrorType.NotFound, "Inventory not found.");
+        if (!_accessService.CanManageSettings(inventory, GetUserId(user), IsAdmin(user))) return ServiceResult<List<CustomFieldDto>>.FromError(ServiceErrorType.Forbidden, "Forbidden.");
 
         var fields = await _context.CustomFields
             .Where(cf => cf.InventoryId == inventoryId).OrderBy(cf => cf.Order)
             .Select(cf => new CustomFieldDto { Id = cf.Id, Name = cf.Name, Type = cf.Type.ToString() }).ToListAsync();
-        return (fields, null);
+        return ServiceResult<List<CustomFieldDto>>.Success(fields);
     }
 
     public async Task<ServiceResult<object>> UpdateCustomFieldAsync(string fieldId, FieldNameUpdateRequest fieldUpdate, ClaimsPrincipal user)
