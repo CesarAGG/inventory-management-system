@@ -23,35 +23,15 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="customid-tab" data-bs-toggle="tab" data-bs-target="#customid-tab-pane" type="button" role="tab" aria-controls="customid-tab-pane" aria-selected="false">Custom ID</button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="access-tab" data-bs-toggle="tab" data-bs-target="#access-tab-pane" type="button" role="tab" aria-controls="access-tab-pane" aria-selected="false">Access</button>
+            </li>
         </ul>
 
         <div class="tab-content" id="inventoryTabsContent">
             <!-- Items Tab Pane (Active by default) -->
-            <div class="tab-pane fade show active" id="items-tab-pane" role="tabpanel" aria-labelledby="items-tab" tabindex="0">
-                <form id="itemsForm" method="post">
-                    <div class="card mt-3">
-                        <div class="card-header bg-light">
-                            <div class="d-flex align-items-center">
-                                <h5 class="mb-0">Items Toolbar</h5>
-                                <div class="ms-auto">
-                                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#itemModal">Add New Item</button>
-                                    <button type="button" class="btn btn-outline-secondary" id="editSelectedItemBtn" disabled>Edit Selected</button>
-                                    <button type="button" class="btn btn-danger" id="deleteSelectedItemsBtn">Delete Selected</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="row justify-content-center">
-                                <div class="col-auto table-responsive">
-                                    <table class="table table-hover mb-0" id="itemsDataTable">
-                                        <thead id="items-table-head"></thead>
-                                        <tbody id="items-table-body"></tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </form>
+            <div class="tab-pane fade show active" id="items-tab-pane" role="tabpanel">
+                <partial name="_InventoryItemsTab" model="Model" view-data="ViewData" />
             </div>
 
             <!-- Fields Tab Pane -->
@@ -160,67 +140,60 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Access Tab Pane -->
+            <div class="tab-pane fade" id="access-tab-pane" role="tabpanel" aria-labelledby="access-tab" tabindex="0">
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header">
+                                <h5 class="mb-0">General Access</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="isPublicSwitch">
+                                    <label class="form-check-label" for="isPublicSwitch">Public Write Access</label>
+                                </div>
+                                <small class="form-text text-muted">When enabled, any authenticated user can add, edit, and delete items in this inventory.</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Manage Specific User Access</h5>
+                                <button id="revokeSelectedBtn" class="btn btn-danger btn-sm" disabled>Revoke Selected</button>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="userSearchInput" class="form-label">Add user by exact email address</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="userSearchInput" placeholder="user@example.com">
+                                        <button class="btn btn-outline-secondary" type="button" id="userSearchBtn">Search</button>
+                                    </div>
+                                    <div id="userSearchResults" class="list-group mt-1 position-absolute" style="z-index: 1000; width: calc(100% - 2rem);"></div>
+                                </div>
+                                <hr />
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6>Users with Write Access:</h6>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="selectAllPermissionsCheckbox">
+                                        <label class="form-check-label" for="selectAllPermissionsCheckbox">Select All</label>
+                                    </div>
+                                </div>
+                                <ul id="grantedUsersList" class="list-group mt-2">
+                                    <!-- Users will be listed here -->
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
 <!-- Modals -->
-<!-- Add/Edit Item Modal -->
-<div class="modal fade" id="itemModal" tabindex="-1" aria-labelledby="itemModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h1 class="modal-title fs-5" id="itemModalLabel">Add New Item</h1>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form id="itemForm">
-                <input type="hidden" id="itemId" name="Id" />
-                <div class="modal-body">
-                    <!-- Form fields will be dynamically generated here -->
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-primary">Save</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- View Content Modal -->
-<div class="modal fade" id="viewContentModal" tabindex="-1" aria-labelledby="viewContentModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h1 class="modal-title fs-5" id="viewContentModalLabel">Field Content</h1>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <pre id="viewContentModalBody" style="white-space: pre-wrap; word-wrap: break-word;"></pre>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Delete Items Confirmation Modal -->
-<div class="modal fade" id="deleteItemsConfirmModal" tabindex="-1" aria-labelledby="deleteItemsConfirmModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h1 class="modal-title fs-5" id="deleteItemsConfirmModalLabel">Confirm Deletion</h1>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                Are you sure you want to delete the selected items? This action cannot be undone.
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-danger" id="confirmDeleteItemsBtn">Delete</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- Delete Fields Confirmation Modal -->
 <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
     <div class="modal-dialog">
@@ -322,806 +295,34 @@
         }
 
         .toast-container {
-            z-index: 1100; 
+            z-index: 1100;
         }
     </style>
 }
 
 @section Scripts {
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <script src="~/js/inventory/common.js" asp-append-version="true"></script>
+    <script src="~/js/inventory/itemsTab.js" asp-append-version="true"></script>
+    <script src="~/js/inventory/fieldsTab.js" asp-append-version="true"></script>
+    <script src="~/js/inventory/customIdTab.js" asp-append-version="true"></script>
+    <script src="~/js/inventory/accessTab.js" asp-append-version="true"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            // --- Common variables ---
-            const inventoryId = document.querySelector('input[name="inventoryId"]').value;
-            const csrfToken = document.querySelector('input[name="__RequestVerificationToken"]').value;
-            let itemsDataTable = null;
+            const inventoryId = "@Model.Id";
+            const csrfToken = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
 
-            // --- Toast Function & escapeHtml ---
-            function showToast(message, isError = false) {
-                const toastContainer = document.querySelector('.toast-container');
-                const toastId = 'toast-' + Math.random().toString(36).substr(2, 9);
-                const toastHtml = `
-                                            <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
-                                                <div class="toast-header ${isError ? 'bg-danger text-white' : 'bg-success text-white'}">
-                                                    <strong class="me-auto">${isError ? 'Error' : 'Success'}</strong>
-                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
-                                                </div>
-                                                <div class="toast-body">${escapeHtml(message)}</div>
-                                            </div>`;
-                toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-                const toastElement = document.getElementById(toastId);
-                const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
-                toast.show();
-                toastElement.addEventListener('hidden.bs.toast', () => toastElement.remove());
-            }
-            function escapeHtml(unsafe) {
-                return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-            }
+            const canWrite = @(ViewData["CanWrite"] as bool? ?? false ? "true" : "false");
+            const canManageSettings = @(ViewData["CanManageSettings"] as bool? ?? false ? "true" : "false");
 
-            // --- Fields Tab Logic ---
-            const fieldsList = document.getElementById('fields-list');
-            const addFieldBtn = document.getElementById('addFieldBtn');
-            const newFieldNameInput = document.getElementById('newFieldName');
-            const newFieldTypeSelect = document.getElementById('newFieldType');
-            const deleteFieldModal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
-            const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
-            const deleteSelectedFieldsBtn = document.getElementById('deleteSelectedFieldsBtn');
-            const editSelectedFieldBtn = document.getElementById('editSelectedFieldBtn');
-            const editFieldModal = new bootstrap.Modal(document.getElementById('editFieldModal'));
-            const editFieldForm = document.getElementById('editFieldForm');
-            const editFieldIdInput = document.getElementById('editFieldId');
-            const editFieldNameInput = document.getElementById('editFieldNameInput');
-            let fieldsToDeleteIds = [];
+            initializeItemsTab(inventoryId, csrfToken, canWrite);
 
-            editFieldForm.addEventListener('submit', function (e) {
-                e.preventDefault();
-                const fieldId = editFieldIdInput.value;
-                const newName = editFieldNameInput.value;
-                updateFieldName(fieldId, newName);
-                editFieldModal.hide();
-            });
-
-            function refreshAllData() {
-                if (itemsDataTable) {
-                    itemsDataTable.destroy();
-                    itemsDataTable = null;
-                }
-                fetchItemsAndSchema();
-            }
-            async function fetchFields() {
-                const response = await fetch(`/api/inventory/${inventoryId}/fields`);
-                if (!response.ok) { showToast('Failed to load fields.', true); return; }
-                const fields = await response.json();
-                renderFields(fields);
-            }
-            async function addField() {
-                const name = newFieldNameInput.value.trim();
-                const type = newFieldTypeSelect.value;
-                if (!name) { showToast('Field name cannot be empty.', true); return; }
-                const response = await fetch(`/api/inventory/${inventoryId}/fields`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
-                    body: JSON.stringify({ name: name, type: type })
-                });
-                if (response.ok) {
-                    newFieldNameInput.value = '';
-                    showToast('Field added successfully.');
-                    fetchFields();
-
-                    refreshAllData();
-                } else {
-                    const errorText = await response.text();
-                    showToast(`Failed to add field: ${errorText}`, true);
-                }
-            }
-            async function deleteSelectedFields() {
-                if (fieldsToDeleteIds.length === 0) return;
-
-                const response = await fetch('/api/inventory/fields/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
-                    body: JSON.stringify(fieldsToDeleteIds) // Send the array directly
-                });
-
-                deleteFieldModal.hide();
-
-                if (response.ok) {
-                    showToast('Selected fields deleted successfully.');
-                    fetchFields();
-
-                    refreshAllData();
-                } else {
-                    showToast('Failed to delete selected fields.', true);
-                }
-                fieldsToDeleteIds = [];
-            }
-            async function updateFieldName(fieldId, newName) {
-                const response = await fetch(`/api/inventory/fields/${fieldId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
-                    body: JSON.stringify({ name: newName, type: '' })
-                });
-                if (response.ok) { showToast('Field renamed successfully.'); fetchFields(); }
-                else { showToast('Failed to rename field.', true); }
-            }
-            async function reorderFields(orderedIds) {
-                const response = await fetch(`/api/inventory/${inventoryId}/fields/reorder`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
-                    body: JSON.stringify(orderedIds)
-                });
-                if (!response.ok) { showToast('Failed to save new order.', true); }
-            }
-            function renderFields(fields) {
-                fieldsList.innerHTML = '';
-                const systemFields = [{ name: 'Item ID', type: 'System ID (Read-Only)' }, { name: 'Created At', type: 'System Date (Read-Only)' }];
-                systemFields.forEach(sf => {
-                    const li = document.createElement('li');
-                    li.className = 'list-group-item d-flex align-items-center disabled bg-light';
-                    li.innerHTML = `<div class="flex-grow-1"><strong>${escapeHtml(sf.name)}</strong><small class="text-muted d-block">${escapeHtml(sf.type)}</small></div>`;
-                    fieldsList.appendChild(li);
-                });
-                fields.forEach(field => {
-                    const li = document.createElement('li');
-                    li.className = 'list-group-item d-flex align-items-center';
-                    li.dataset.id = field.id;
-                    const fieldName = escapeHtml(field.name);
-                    let nameHtml = fieldName;
-                    if (fieldName.length > 35) { nameHtml = `<span class="truncated-text" title="${fieldName}">${fieldName.substring(0, 32)}<span class="unselectable">...</span></span>`; }
-                    li.innerHTML = `
-                                    <input class="form-check-input me-2" type="checkbox" value="${field.id}" name="selectedFieldIds">
-                                    <span class="drag-handle" style="cursor: move; margin-right: 10px;">&#9776;</span>
-                                    <div class="flex-grow-1" style="min-width: 0;">
-                                        <strong class="d-block text-truncate field-name" data-field-id="${field.id}">${nameHtml}</strong>
-                                        <small class="text-muted d-block">${escapeHtml(field.type)}</small>
-                                    </div>`;
-                    fieldsList.appendChild(li);
-                });
-            }
-
-            new Sortable(fieldsList, { animation: 150, handle: '.drag-handle', onEnd: () => reorderFields(Array.from(fieldsList.querySelectorAll('li[data-id]')).map(item => item.dataset.id)) });
-            addFieldBtn.addEventListener('click', addField);
-            confirmDeleteBtn.addEventListener('click', deleteSelectedFields);
-            editSelectedFieldBtn.addEventListener('click', () => {
-                const selectedCheckbox = document.querySelector('input[name="selectedFieldIds"]:checked');
-                if (!selectedCheckbox) return;
-
-                const fieldNameSpan = selectedCheckbox.closest('li').querySelector('.field-name');
-                const currentName = fieldNameSpan.textContent.trim().replace('...', '');
-
-                editFieldIdInput.value = selectedCheckbox.value;
-                editFieldNameInput.value = currentName;
-                editFieldModal.show();
-            });
-
-            const fieldSelectionChangeHandler = () => {
-                const selectedCount = document.querySelectorAll('input[name="selectedFieldIds"]:checked').length;
-                if (selectedCount === 1) {
-                    editSelectedFieldBtn.disabled = false;
-                    editSelectedFieldBtn.classList.replace('btn-outline-secondary', 'btn-secondary');
-                } else {
-                    editSelectedFieldBtn.disabled = true;
-                    editSelectedFieldBtn.classList.replace('btn-secondary', 'btn-outline-secondary');
-                }
-            };
-            fieldsList.addEventListener('change', fieldSelectionChangeHandler);
-
-            // --- Items Tab Logic ---
-            const itemsTableHead = document.getElementById('items-table-head');
-            const itemsTableBody = document.getElementById('items-table-body');
-            const itemForm = document.getElementById('itemForm');
-            const itemModalEl = document.getElementById('itemModal');
-            const itemModal = new bootstrap.Modal(itemModalEl);
-            const itemModalLabel = document.getElementById('itemModalLabel');
-            const itemIdInput = document.getElementById('itemId');
-            const editSelectedItemBtn = document.getElementById('editSelectedItemBtn');
-            const deleteSelectedItemsBtn = document.getElementById('deleteSelectedItemsBtn');
-            const deleteItemsModal = new bootstrap.Modal(document.getElementById('deleteItemsConfirmModal'));
-            const confirmDeleteItemsBtn = document.getElementById('confirmDeleteItemsBtn');
-            const viewContentModal = new bootstrap.Modal(document.getElementById('viewContentModal'));
-            const viewContentModalLabel = document.getElementById('viewContentModalLabel');
-            const viewContentModalBody = document.getElementById('viewContentModalBody');
-            let itemSchema = [];
-
-            async function fetchItemsAndSchema() {
-                const response = await fetch(`/api/inventory/${inventoryId}/items-data`);
-                if (!response.ok) {
-                    showToast('Failed to load items.', true);
-                    return;
-                }
-                const data = await response.json();
-                itemSchema = data.fields;
-
-                buildItemModalForm(itemSchema);
-                renderItemsUI(itemSchema, data.items);
-            }
-
-            function convertItemToRowDataArray(item, fields) {
-                // This object will be passed to the 'Created At' column's render function.
-                const createdAtData = {
-                    display: new Date(item.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
-                    sort: new Date(item.createdAt).getTime()
-                };
-
-                // This object will be passed to the 'Item ID' column's render function.
-                const idCellData = {
-                    id: item.id,
-                    display: item.customId ? (item.customId.length > 12 ? `${item.customId.substring(0, 12)}...` : item.customId) : `${item.id.substring(0, 8)}...`,
-                    full: item.customId || `System ID: ${item.id}`,
-                    isCustom: !!item.customId
-                };
-
-                const rowData = [
-                    idCellData, // Checkbox column will use the ID from this object
-                    idCellData,
-                    createdAtData
-                ];
-
-                fields.forEach(f => {
-                    rowData.push(item.fields[f.targetColumn] ?? '');
-                });
-
-                return rowData;
-            } 
-
-            function buildItemModalForm(fields) {
-                const itemModalBody = document.querySelector('#itemModal .modal-body');
-                let formHtml = '';
-                fields.forEach(field => {
-                    formHtml += `<div class="mb-3"><label for="item-field-${field.id}" class="form-label">${escapeHtml(field.name)}</label>`;
-                    switch (field.type) {
-                        case 'Text':
-                            formHtml += `<textarea class="form-control" id="item-field-${field.id}" name="${field.id}"></textarea>`;
-                            break;
-                        case 'Bool':
-                            formHtml += `<div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="item-field-${field.id}" name="${field.id}"></div>`;
-                            break;
-                        case 'Numeric':
-                            formHtml += `<input type="number" step="any" class="form-control" id="item-field-${field.id}" name="${field.id}">`;
-                            break;
-                        default: // String, FileUrl
-                            formHtml += `<input type="text" class="form-control" id="item-field-${field.id}" name="${field.id}">`;
-                    }
-                    formHtml += `</div>`;
-                });
-                itemModalBody.innerHTML = formHtml;
-            }
-
-            function renderItemsUI(fields, items) {
-                if (itemsDataTable) {
-                    itemsDataTable.destroy();
-                }
-
-                let headersHtml = `<tr><th style="width: 50px;"><input class="form-check-input" type="checkbox" id="selectAllItemsCheckbox" /></th>
-                               <th>Item ID</th>
-                               <th style="width: 180px;">Created At</th>`;
-
-                fields.forEach(f => {
-                    const fieldName = escapeHtml(f.name);
-                    const headerText = fieldName.length > 35 ? `${fieldName.substring(0, 32)}<span class="unselectable">...</span>` : fieldName;
-                    headersHtml += `<th title="${fieldName}">${headerText}</th>`;
-                });
-                itemsTableHead.innerHTML = headersHtml + `</tr>`;
-                itemsTableBody.innerHTML = '';
-
-                const tableData = items.map(item => convertItemToRowDataArray(item, fields));
-
-                itemsDataTable = new DataTable('#itemsDataTable', {
-                    data: tableData,
-                    order: [[2, 'desc']],
-                    columnDefs: [
-                        { // Checkbox
-                            targets: 0, orderable: false,
-                            render: (data) => `<input class="form-check-input item-checkbox" type="checkbox" name="selectedItemIds" value="${escapeHtml(data.id)}" />`
-                        },
-                        { // Item ID
-                            targets: 1,
-                            render: (data) => {
-                                const classes = data.isCustom ? 'font-monospace' : 'font-monospace text-muted';
-                                return `<div class="expandable-cell" data-field-name="Item ID" data-content="${escapeHtml(data.full)}"><span class="truncated-text ${classes}" title="${escapeHtml(data.full)}">${escapeHtml(data.display)}</span></div>`;
-                            }
-                        },
-                        { // Created At
-                            targets: 2,
-                            render: (data, type) => type === 'sort' ? data.sort : data.display
-                        },
-                        ...fields.map((f, i) => ({
-                            targets: i + 3,
-                            render: function (data, type, row) {
-                                let display = '';
-                                const stringValue = String(data ?? '');
-                                let cellClass = '';
-
-                                if (f.type === 'Bool') {
-                                    display = data === true ? '✔️' : '❌';
-                                } else if (stringValue.length > 35) {
-                                    display = `<span class="truncated-text">${escapeHtml(stringValue.substring(0, 32))}<span class="unselectable">...</span></span>`;
-                                    // This class enables the modal popup for long text.
-                                    cellClass = 'expandable-cell';
-                                } else {
-                                    display = escapeHtml(stringValue);
-                                }
-
-                                // This wrapper div with data attributes is essential.
-                                return `<div class="${cellClass}" data-field-name="${escapeHtml(f.name)}" data-content="${escapeHtml(stringValue)}">${display}</div>`;
-                            }
-                        }))
-                    ]
-                });
-            }
-
-            function openItemModal(itemData = null) {
-                itemForm.reset();
-                itemForm.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
-                itemForm.querySelectorAll('.invalid-feedback').forEach(el => el.remove());
-
-                if (itemData) { // Edit Mode
-                    itemModalLabel.textContent = 'Edit Item';
-                    itemIdInput.value = itemData.id;
-
-                    itemSchema.forEach(field => {
-                        const input = itemForm.querySelector(`[name="${field.id}"]`);
-                        if (input) {
-                            const value = itemData.fields[field.targetColumn];
-                            if (field.type === 'Bool') {
-                                input.checked = value === true;
-                            } else {
-                                input.value = value ?? '';
-                            }
-                        }
-                    });
-                } else { // Add Mode
-                    itemModalLabel.textContent = 'Add New Item';
-                    itemIdInput.value = '';
-                }
-                itemModal.show();
-            }
-            async function saveItem() {
-                const itemId = itemIdInput.value;
-                const isEditing = !!itemId;
-                const formData = new FormData(itemForm);
-                const fieldValues = {};
-                itemSchema.forEach(field => {
-                    if (field.type === 'Bool') {
-                        fieldValues[field.id] = formData.has(field.id);
-                    } else {
-                        fieldValues[field.id] = formData.get(field.id);
-                    }
-                });
-
-                const apiUrl = isEditing ? `/api/inventory/items/${itemId}` : `/api/inventory/${inventoryId}/items`;
-
-                const response = await fetch(apiUrl, {
-                    method: isEditing ? 'PUT' : 'POST',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
-                    body: JSON.stringify({ fieldValues: fieldValues })
-                });
-
-                if (response.ok) {
-                    showToast(`Item ${isEditing ? 'updated' : 'added'} successfully.`);
-                    itemModal.hide();
-
-                    const contentLength = response.headers.get('content-length');
-                    if (contentLength && parseInt(contentLength, 10) > 0) {
-                        const createdItem = await response.json();
-                        if (itemsDataTable) {
-                            const newRowData = convertItemToRowDataArray(createdItem, itemSchema);
-                            itemsDataTable.row.add(newRowData).draw();
-                        }
-                    } else {
-                        fetchItemsAndSchema();
-                    }
-                }
-                else if (response.status === 400) {
-                    const errors = await response.json();
-
-                    itemForm.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
-                    itemForm.querySelectorAll('.invalid-feedback').forEach(el => el.remove());
-
-                    for (const fieldId in errors) {
-                        const errorMessage = errors[fieldId];
-                        const input = itemForm.querySelector(`[name="${fieldId}"]`);
-                        if (input) {
-                            input.classList.add('is-invalid');
-                            const errorDiv = document.createElement('div');
-                            errorDiv.className = 'invalid-feedback';
-                            errorDiv.textContent = errorMessage;
-                            input.parentElement.appendChild(errorDiv);
-                        }
-                    }
-                    showToast('Please correct the highlighted errors.', true);
-                } else {
-                    showToast(`Failed to ${isEditing ? 'update' : 'add'} item.`, true);
-                }
-            }
-            async function deleteSelectedItems() {
-                const selectedCheckboxes = document.querySelectorAll('.item-checkbox:checked');
-                const itemIds = Array.from(selectedCheckboxes).map(cb => cb.value);
-                const response = await fetch('/api/inventory/items/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
-                    body: JSON.stringify(itemIds)
-                });
-                deleteItemsModal.hide();
-                if (response.ok) { showToast('Selected items deleted.', true); fetchItemsAndSchema(); }
-                else { showToast('Failed to delete items.', true); }
-            }
-
-            // --- Custom ID Tab Logic ---
-            const customIdTabEl = document.getElementById('customid-tab');
-            const currentFormatList = document.getElementById('current-format-list');
-            const availableSegmentsList = document.getElementById('available-segments-list');
-            const previewSpan = document.getElementById('idPreview');
-            const saveIdFormatBtn = document.getElementById('saveIdFormatBtn');
-            const editSegmentModal = new bootstrap.Modal(document.getElementById('editSegmentModal'));
-            const editSegmentModalLabel = document.getElementById('editSegmentModalLabel');
-            const editSegmentModalBody = document.getElementById('editSegmentModalBody');
-            const editSegmentForm = document.getElementById('editSegmentForm');
-            let currentIdFormat = [];
-
-            let datePreviewDebounceTimer;
-            let originalSegmentForCancel = null;
-            const datePreviewCache = new Map();
-
-            function debounce(func, delay) {
-                return function (...args) {
-                    clearTimeout(datePreviewDebounceTimer);
-                    datePreviewDebounceTimer = setTimeout(() => {
-                        func.apply(this, args);
-                    }, delay);
-                };
-            }
-
-            const editSelectedSegmentBtn = document.getElementById('editSelectedSegmentBtn');
-            const removeSelectedSegmentsBtn = document.getElementById('removeSelectedSegmentsBtn');
-            const clearFormatBtn = document.getElementById('clearFormatBtn');
-
-            function updateSegmentToolbar() {
-                const selectedCount = document.querySelectorAll('.segment-checkbox:checked').length;
-                editSelectedSegmentBtn.disabled = selectedCount !== 1;
-                removeSelectedSegmentsBtn.disabled = selectedCount === 0;
-            }
-
-            clearFormatBtn.addEventListener('click', () => {
-                currentIdFormat = [];
-                renderCurrentFormat();
-            });
-
-            removeSelectedSegmentsBtn.addEventListener('click', () => {
-                const selectedIds = Array.from(document.querySelectorAll('.segment-checkbox:checked')).map(cb => cb.value);
-                currentIdFormat = currentIdFormat.filter(s => !selectedIds.includes(s.id));
-                renderCurrentFormat();
-            });
-
-            editSelectedSegmentBtn.addEventListener('click', () => {
-                const selectedId = document.querySelector('.segment-checkbox:checked').value;
-                openEditSegmentModal(selectedId);
-            });
-
-            function createDefaultSegment(type) {
-                const base = { id: `client-${Math.random().toString(36).slice(2)}`, type: type };
-                switch (type) {
-                    case 'FixedText': return { ...base, value: '-' }; 
-                    case 'Sequence': return { ...base, startValue: 1, step: 1, padding: 4 };
-                    case 'Date': return { ...base, format: 'yyyy-MM-dd' };
-                    case 'RandomNumbers': return { ...base, length: 4 };
-                    case 'Guid': return { ...base, format: 'N' };
-                    default: return null;
-                }
-            }
-
-            const updateDatePreviews = debounce(async (formatsToPreview) => {
-                if (formatsToPreview.length === 0) return;
-
-                const formatsToFetch = [...new Set(formatsToPreview.map(p => p.format))]
-                    .filter(f => !datePreviewCache.has(f));
-
-                if (formatsToFetch.length > 0) {
-                    try {
-                        const response = await fetch('/api/utils/date-previews', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(formatsToFetch)
-                        });
-
-                        if (!response.ok) throw new Error('API Error');
-
-                        const previews = await response.json();
-                        previews.forEach(p => datePreviewCache.set(p.format, p));
-
-                    } catch (error) {
-                        formatsToFetch.forEach(f => datePreviewCache.set(f, { preview: '[API Error]', isValid: false }));
-                    }
-                }
-
-                formatsToPreview.forEach(item => {
-                    const previewSpan = document.getElementById(item.spanId);
-                    if (previewSpan) {
-                        const result = datePreviewCache.get(item.format);
-                        if (result) {
-                            previewSpan.textContent = result.preview;
-                            previewSpan.classList.toggle('text-danger', !result.isValid);
-                        }
-                    }
-                });
-            }, 300);
-
-            function generatePreview() {
-                if (currentIdFormat.length === 0) { previewSpan.innerHTML = 'No format defined.'; return; }
-                let previewHtml = '';
-                let formatsToFetch = [];
-                const sequenceSegment = currentIdFormat.find(s => s.type === 'Sequence');
-                const sequenceValue = sequenceSegment ? sequenceSegment.startValue : 0;
-
-                currentIdFormat.forEach(segment => {
-                    const spanId = `preview-segment-${segment.id}`;
-                    switch (segment.type) {
-                        case 'FixedText':
-                            previewHtml += `<span>${escapeHtml(segment.value)}</span>`;
-                            break;
-                        case 'Sequence':
-                            previewHtml += `<span>${escapeHtml(sequenceValue.toString().padStart(segment.padding, '0'))}</span>`;
-                            break;
-                        case 'Date':
-                            if (datePreviewCache.has(segment.format)) {
-                                const result = datePreviewCache.get(segment.format);
-                                const dangerClass = result.isValid ? '' : 'text-danger';
-                                previewHtml += `<span id="${spanId}" class="${dangerClass}">${escapeHtml(result.preview)}</span>`;
-                            } else {
-                                previewHtml += `<span id="${spanId}">[Loading date...]</span>`;
-                                formatsToFetch.push({ format: segment.format, spanId: spanId });
-                            }
-                            break;
-                        case 'RandomNumbers':
-                            previewHtml += `<span>${escapeHtml('1'.repeat(segment.length))}</span>`;
-                            break;
-                        case 'Guid':
-                            previewHtml += `<span>a1b2c3d4e5f6...</span>`;
-                            break;
-                    }
-                });
-                previewSpan.innerHTML = previewHtml;
-
-                if (formatsToFetch.length > 0) {
-                    updateDatePreviews(formatsToFetch);
-                }
-            }
-
-            function renderCurrentFormat() {
-                currentFormatList.innerHTML = '';
-                currentIdFormat.forEach(segment => {
-                    const el = document.createElement('div');
-                    el.className = 'list-group-item d-flex align-items-center';
-                    el.dataset.id = segment.id;
-                    let details = Object.entries(segment).filter(([k]) => k !== 'id' && k !== 'type').map(([k, v]) => `${k}: ${v}`).join(', ');
-                    el.innerHTML = `
-                        <input class="form-check-input me-3 segment-checkbox" type="checkbox" value="${segment.id}">
-                        <div class="flex-grow-1">
-                            <strong class="d-block">${segment.type}</strong>
-                            <small class="text-muted">${details}</small>
-                        </div>`;
-                    currentFormatList.appendChild(el);
-                });
-                generatePreview();
-                updateSegmentToolbar();
+            if (canManageSettings) {
+                initializeFieldsTab(inventoryId, csrfToken);
+                initializeCustomIdTab(inventoryId, csrfToken);
+                initializeAccessTab(inventoryId, csrfToken);
                 initializePopovers();
             }
-
-            async function fetchIdFormat() {
-                const response = await fetch(`/api/inventory/${inventoryId}/id-format`);
-                if (!response.ok) {
-                    showToast('Failed to load ID format.', true);
-                    return;
-                }
-                currentIdFormat = await response.json();
-                renderCurrentFormat();
-            }
-
-            async function saveIdFormat() {
-                const response = await fetch(`/api/inventory/${inventoryId}/id-format`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
-                    body: JSON.stringify(currentIdFormat)
-                });
-                if (response.ok) { showToast('ID format saved successfully.'); }
-                else { showToast('Failed to save ID format.', true); }
-            }
-
-            function openEditSegmentModal(segmentId) {
-                const segment = currentIdFormat.find(s => s.id === segmentId);
-                if (!segment) return;
-
-                originalSegmentForCancel = JSON.parse(JSON.stringify(segment));
-
-                document.getElementById('segmentId').value = segmentId;
-                editSegmentModalLabel.textContent = `Edit ${segment.type} Segment`;
-                let formHtml = '';
-
-                switch (segment.type) {
-                    case 'FixedText':
-                        formHtml = `<div class="mb-3"><label for="prop-value" class="form-label">Text Value</label><input type="text" class="form-control" id="prop-value" name="value" value="${escapeHtml(String(segment.value))}" required></div>`;
-                        break;
-                    case 'Sequence':
-                        formHtml = `<div class="mb-3"><label for="prop-startValue" class="form-label">Start Value</label><input type="number" class="form-control" id="prop-startValue" name="startValue" value="${segment.startValue}" min="0" required></div>
-                                    <div class="mb-3"><label for="prop-step" class="form-label">Step</label><input type="number" class="form-control" id="prop-step" name="step" value="${segment.step}" min="1" required></div>
-                                    <div class="mb-3"><label for="prop-padding" class="form-label">Padding (Number of digits)</label><input type="number" class="form-control" id="prop-padding" name="padding" value="${segment.padding}" min="1" max="20" required></div>`;
-                        break;
-                    case 'Date':
-                        formHtml = `<div class="mb-3"><label for="prop-format" class="form-label">Date Format</label><input type="text" class="form-control" id="prop-format" name="format" value="${escapeHtml(String(segment.format))}" required><small class="form-text text-muted">e.g., yyyy-MM-dd, MMddyy, HH:mm</small></div>`;
-                        break;
-                    case 'RandomNumbers':
-                        formHtml = `<div class="mb-3"><label for="prop-length" class="form-label">Length</label><input type="number" class="form-control" id="prop-length" name="length" value="${segment.length}" min="1" max="20" required></div>`;
-                        break;
-                    case 'Guid':
-                        const formats = ['N', 'D', 'B', 'P'];
-                        let options = formats.map(f => `<option value="${f}" ${segment.format === f ? 'selected' : ''}>${f}</option>`).join('');
-                        formHtml = `<div class="mb-3"><label for="prop-format" class="form-label">Format</label><select class="form-select" id="prop-format" name="format">${options}</select></div>`;
-                        break;
-                }
-
-                editSegmentModalBody.innerHTML = formHtml;
-
-                if (segment.type === 'Date') {
-                    const formatInput = editSegmentModalBody.querySelector('#prop-format');
-                    formatInput.addEventListener('input', () => {
-                        const segmentToUpdate = currentIdFormat.find(s => s.id === segmentId);
-                        if (segmentToUpdate) {
-                            segmentToUpdate.format = formatInput.value;
-                            generatePreview();
-                        }
-                    });
-                }
-
-                editSegmentModal.show();
-            }
-
-            customIdTabEl.addEventListener('show.bs.tab', () => {
-                if (currentFormatList.innerHTML.trim() === '') {
-                    fetchIdFormat();
-                }
-            });
-            saveIdFormatBtn.addEventListener('click', saveIdFormat);
-            currentFormatList.addEventListener('change', e => {
-                if (e.target.classList.contains('segment-checkbox')) {
-                    updateSegmentToolbar();
-                }
-            });
-
-            new Sortable(availableSegmentsList, { group: { name: 'segments', pull: 'clone', put: false }, sort: false, animation: 150 });
-            new Sortable(currentFormatList, {
-                group: 'segments', animation: 150,
-                onAdd: evt => {
-                    const newSegment = createDefaultSegment(evt.item.dataset.segmentType);
-                    evt.item.remove(); // Remove the placeholder clone immediately
-                    if (newSegment) {
-                        currentIdFormat.splice(evt.newIndex, 0, newSegment);
-                        renderCurrentFormat();
-                        openEditSegmentModal(newSegment.id); // Automatically open the edit modal
-                    }
-                },
-                onEnd: evt => {
-                    const [movedItem] = currentIdFormat.splice(evt.oldIndex, 1);
-                    currentIdFormat.splice(evt.newIndex, 0, movedItem);
-                    renderCurrentFormat();
-                }
-            });
-
-            currentFormatList.addEventListener('click', e => {
-                const segmentId = e.target.closest('.list-group-item')?.dataset.id;
-                if (!segmentId) return;
-                if (e.target.classList.contains('remove-segment-btn')) {
-                    currentIdFormat = currentIdFormat.filter(s => s.id !== segmentId);
-                    renderCurrentFormat();
-                }
-                if (e.target.classList.contains('edit-segment-btn')) openEditSegmentModal(segmentId);
-            });
-
-            editSegmentForm.addEventListener('submit', function (e) {
-                e.preventDefault();
-                clearTimeout(datePreviewDebounceTimer); // Prevent unnecessary API call
-                const segmentId = document.getElementById('segmentId').value;
-                const segmentIndex = currentIdFormat.findIndex(s => s.id === segmentId);
-                if (segmentIndex === -1) return;
-
-                const segment = currentIdFormat[segmentIndex];
-                const formData = new FormData(editSegmentForm);
-
-                // Explicitly update properties based on segment type
-                switch (segment.type) {
-                    case 'FixedText':
-                        segment.value = formData.get('value');
-                        break;
-                    case 'Sequence':
-                        segment.startValue = parseInt(formData.get('startValue'), 10);
-                        segment.step = parseInt(formData.get('step'), 10);
-                        segment.padding = parseInt(formData.get('padding'), 10);
-                        break;
-                    case 'Date':
-                        segment.format = formData.get('format');
-                        break;
-                    case 'RandomNumbers':
-                        segment.length = parseInt(formData.get('length'), 10);
-                        break;
-                    case 'Guid':
-                        segment.format = formData.get('format');
-                        break;
-                }
-
-                originalSegmentForCancel = null; // Signal that the save was successful
-                editSegmentModal.hide();
-                renderCurrentFormat();
-            });
-
-            document.getElementById('editSegmentModal').addEventListener('hide.bs.modal', () => {
-                if (originalSegmentForCancel) {
-                    // If this object still exists, it means save was not clicked.
-                    const segmentIndex = currentIdFormat.findIndex(s => s.id === originalSegmentForCancel.id);
-                    if (segmentIndex !== -1) {
-                        currentIdFormat[segmentIndex] = originalSegmentForCancel; // Restore original state
-                    }
-                    originalSegmentForCancel = null;
-                    renderCurrentFormat(); // Re-render to show the restored state
-                }
-            });
-
-            // --- Event Handlers ---
-            document.querySelector('button[data-bs-target="#itemModal"]').addEventListener('click', () => openItemModal());
-            itemForm.addEventListener('submit', (e) => { e.preventDefault(); saveItem(); });
-
-            editSelectedItemBtn.addEventListener('click', async () => {
-                const selectedCheckbox = document.querySelector('.item-checkbox:checked');
-                if (!selectedCheckbox) return;
-
-                const response = await fetch(`/api/inventory/items/${selectedCheckbox.value}`);
-                if (!response.ok) {
-                    showToast('Error fetching item details.', true);
-                    return;
-                }
-                const itemData = await response.json();
-                openItemModal(itemData);
-            });
-            deleteSelectedFieldsBtn.addEventListener('click', () => {
-                fieldsToDeleteIds = Array.from(document.querySelectorAll('input[name="selectedFieldIds"]:checked')).map(cb => cb.value);
-                if (fieldsToDeleteIds.length === 0) {
-                    showToast('Please select fields to delete.', true);
-                    return;
-                }
-                deleteFieldModal.show();
-            });
-            deleteSelectedItemsBtn.addEventListener('click', () => { if (document.querySelectorAll('.item-checkbox:checked').length === 0) { showToast('Please select items to delete.', true); return; } deleteItemsModal.show(); });
-            confirmDeleteItemsBtn.addEventListener('click', deleteSelectedItems);
-            const selectionChangeHandler = () => {
-                const selectedCount = document.querySelectorAll('.item-checkbox:checked').length;
-                if (selectedCount === 1) {
-                    editSelectedItemBtn.disabled = false;
-                    editSelectedItemBtn.classList.remove('btn-outline-secondary');
-                    editSelectedItemBtn.classList.add('btn-secondary'); // A more vibrant, solid color
-                } else {
-                    editSelectedItemBtn.disabled = true;
-                    editSelectedItemBtn.classList.remove('btn-secondary');
-                    editSelectedItemBtn.classList.add('btn-outline-secondary');
-                }
-            };
-            itemsTableBody.addEventListener('change', selectionChangeHandler);
-            itemsTableHead.addEventListener('change', e => { if (e.target.id === 'selectAllItemsCheckbox') { document.querySelectorAll('.item-checkbox').forEach(cb => cb.checked = e.target.checked); selectionChangeHandler(); } });
-            itemsTableBody.addEventListener('click', e => { if (e.target.closest('.expandable-cell')) { const cell = e.target.closest('.expandable-cell'); viewContentModalLabel.textContent = cell.dataset.fieldName; viewContentModalBody.textContent = cell.dataset.content; viewContentModal.show(); } });
-
-            // --- Tab Loading Logic ---
-            const itemsTabEl = document.getElementById('items-tab');
-            const fieldsTabEl = document.getElementById('fields-tab');
-
-            fieldsTabEl.addEventListener('show.bs.tab', fetchFields);
-
-            fetchItemsAndSchema();
-            fetchIdFormat();
-
-            function initializePopovers() {
-                const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
-                const popoverList = [...popoverTriggerList].map(popoverTriggerEl => new bootstrap.Popover(popoverTriggerEl));
-            }
-
-            initializePopovers();
-
         });
     </script>
 }

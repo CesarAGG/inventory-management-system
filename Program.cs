@@ -42,6 +42,7 @@ builder.Services.AddAuthentication()
     });
 
 builder.Services.AddScoped<ICustomIdService, CustomIdService>();
+builder.Services.AddScoped<IInventoryAccessService, InventoryAccessService>();
 
 builder.Services.AddControllersWithViews()
     .AddJsonOptions(options =>

@@ -1,0 +1,90 @@
+﻿@model InventoryManagementSystem.ViewModels.UserPageViewModel
+
+@{
+    ViewData["Title"] = "My Page";
+}
+
+<h1>@ViewData["Title"]</h1>
+<p class="text-muted">A central place to manage your inventories.</p>
+<hr />
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h4 class="mb-0">Inventories I Own</h4>
+    </div>
+    <div class="card-body">
+        <table id="ownedInventoriesTable" class="table table-striped table-bordered" style="width:100%">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Created At</th>
+                    <th>Item Count</th>
+                    <th>Access</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var inventory in Model.OwnedInventories)
+                {
+                <tr>
+                    <td><a asp-controller="Inventory" asp-action="Index" asp-route-id="@inventory.Id">@inventory.Name</a></td>
+                    <td>@inventory.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@inventory.ItemCount</td>
+                    <td>@(inventory.IsPublic ? "Public Write" : "Private")</td>
+                </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h4 class="mb-0">Inventories Shared With Me</h4>
+    </div>
+    <div class="card-body">
+        @if (!Model.SharedInventories.Any())
+        {
+        <p class="text-muted">No inventories have been shared with you yet.</p>
+        }
+        else
+        {
+        <table id="sharedInventoriesTable" class="table table-striped table-bordered" style="width:100%">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Created At</th>
+                    <th>Item Count</th>
+                    <th>Owner</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var inventory in Model.SharedInventories)
+                    {
+                <tr>
+                    <td><a asp-controller="Inventory" asp-action="Index" asp-route-id="@inventory.Id">@inventory.Name</a></td>
+                    <td>@inventory.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@inventory.ItemCount</td>
+                    <td>@inventory.OwnerEmail</td>
+                </tr>
+                    }
+            </tbody>
+        </table>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            $('#ownedInventoriesTable').DataTable({
+                "order": [[1, "desc"]]
+            });
+
+            if (document.getElementById('sharedInventoriesTable')) {
+                $('#sharedInventoriesTable').DataTable({
+                    "order": [[1, "desc"]]
+                });
+            }
+        });
+    </script>
+}

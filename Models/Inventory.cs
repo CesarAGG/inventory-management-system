@@ -1,4 +1,5 @@
 using InventoryManagementSystem.Data;
+using InventoryManagementSystem.Models;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -17,6 +18,8 @@ public class Inventory
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    public bool IsPublic { get; set; } = false;
+
     [Required]
     public string OwnerId { get; set; } = string.Empty;
 
@@ -31,4 +34,5 @@ public class Inventory
 
     public virtual ICollection<Item> Items { get; set; } = new List<Item>();
     public virtual ICollection<CustomField> CustomFields { get; set; } = new List<CustomField>();
+    public virtual ICollection<InventoryUserPermission> Permissions { get; set; } = new List<InventoryUserPermission>();
 }
