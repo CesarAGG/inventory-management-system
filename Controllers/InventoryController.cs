@@ -49,7 +49,11 @@ public class InventoryController : Controller
             case ServiceErrorType.NotFound:
                 return NotFound(new { message = result.ErrorMessage });
             case ServiceErrorType.InvalidInput:
-                return BadRequest(result.ValidationErrors ?? new { message = result.ErrorMessage });
+                if (result.ValidationErrors != null)
+                {
+                    return BadRequest(result.ValidationErrors);
+                }
+                return BadRequest(new { message = result.ErrorMessage });
             case ServiceErrorType.Forbidden:
                 return Forbid();
             case ServiceErrorType.Concurrency:
@@ -94,18 +98,20 @@ public class InventoryController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AddCustomField(string inventoryId, [FromBody] CustomFieldDto newField)
     {
-        var (field, error) = await _customFieldService.AddCustomFieldAsync(inventoryId, newField, User);
-        if (error != null) return BadRequest(error);
-        return CreatedAtAction(nameof(GetCustomFields), new { inventoryId }, field);
+        var result = await _customFieldService.AddCustomFieldAsync(inventoryId, newField, User);
+        if (!result.IsSuccess)
+        {
+            return HandleServiceResult(result);
+        }
+        return CreatedAtAction(nameof(GetCustomFields), new { inventoryId }, result.Data);
     }
 
     [HttpGet]
     [Route("api/inventory/{inventoryId}/fields")]
     public async Task<IActionResult> GetCustomFields(string inventoryId)
     {
-        var (fields, error) = await _customFieldService.GetCustomFieldsAsync(inventoryId, User);
-        if (error != null) return StatusCode(403, error);
-        return Ok(fields);
+        var result = await _customFieldService.GetCustomFieldsAsync(inventoryId, User);
+        return HandleServiceResult(result);
     }
 
     [HttpPut]
@@ -144,7 +150,6 @@ public class InventoryController : Controller
         {
             return HandleServiceResult(result);
         }
-
         var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
         var jsonString = JsonSerializer.Serialize(result.Data, options);
         return Content(jsonString, "application/json");
@@ -216,7 +221,12 @@ public class InventoryController : Controller
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
         var result = await _inventoryAdminService.TransferOwnershipAsync(inventoryId, request, User);
-        return HandleServiceResult(result);
+        if (!result.IsSuccess)
+        {
+            return HandleServiceResult(result);
+        }
+        var redirectUrl = result.Data!.ShouldRedirect ? Url.Action("Index", "User") : null;
+        return Ok(new { message = result.Data.Message, redirectUrl });
     }
 
     [HttpDelete]

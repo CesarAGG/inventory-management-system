@@ -3,6 +3,7 @@ using InventoryManagementSystem.Helpers;
 using InventoryManagementSystem.Models;
 using InventoryManagementSystem.Models.CustomId;
 using InventoryManagementSystem.ViewModels;
+using InventoryManagementSystem.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
@@ -10,7 +11,6 @@ using System.Linq;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.Tasks;
-using InventoryManagementSystem.Services;
 
 namespace InventoryManagementSystem.Services.InventoryServices;
 
@@ -118,17 +118,17 @@ public class InventoryAdminService : IInventoryAdminService
         return ServiceResult<object>.Success(new { newName = inventory.Name });
     }
 
-    public async Task<ServiceResult<object>> TransferOwnershipAsync(string inventoryId, TransferOwnershipRequest request, ClaimsPrincipal user)
+    public async Task<ServiceResult<TransferOwnershipResponse>> TransferOwnershipAsync(string inventoryId, TransferOwnershipRequest request, ClaimsPrincipal user)
     {
         await using var transaction = await _context.Database.BeginTransactionAsync();
         var inventory = await _context.Inventories.FirstOrDefaultAsync(i => i.Id == inventoryId);
-        if (inventory == null) return ServiceResult<object>.FromError(ServiceErrorType.NotFound, "Inventory not found.");
-        if (!_accessService.CanManageSettings(inventory, GetUserId(user), IsAdmin(user))) return ServiceResult<object>.FromError(ServiceErrorType.Forbidden, "User does not have permission to manage this inventory.");
+        if (inventory == null) return ServiceResult<TransferOwnershipResponse>.FromError(ServiceErrorType.NotFound, "Inventory not found.");
+        if (!_accessService.CanManageSettings(inventory, GetUserId(user), IsAdmin(user))) return ServiceResult<TransferOwnershipResponse>.FromError(ServiceErrorType.Forbidden, "User does not have permission to manage this inventory.");
 
         var newOwner = await _userManager.FindByEmailAsync(request.NewOwnerEmail);
-        if (newOwner == null) return ServiceResult<object>.FromError(ServiceErrorType.InvalidInput, "The specified user does not exist.");
-        if (newOwner.IsBlocked) return ServiceResult<object>.FromError(ServiceErrorType.InvalidInput, "Cannot transfer ownership to a blocked user.");
-        if (newOwner.Id == inventory.OwnerId) return ServiceResult<object>.FromError(ServiceErrorType.InvalidInput, "This user is already the owner.");
+        if (newOwner == null) return ServiceResult<TransferOwnershipResponse>.FromError(ServiceErrorType.InvalidInput, "The specified user does not exist.");
+        if (newOwner.IsBlocked) return ServiceResult<TransferOwnershipResponse>.FromError(ServiceErrorType.InvalidInput, "Cannot transfer ownership to a blocked user.");
+        if (newOwner.Id == inventory.OwnerId) return ServiceResult<TransferOwnershipResponse>.FromError(ServiceErrorType.InvalidInput, "This user is already the owner.");
 
         bool shouldRedirect = !IsAdmin(user);
 
@@ -151,11 +151,15 @@ public class InventoryAdminService : IInventoryAdminService
         catch (DbUpdateConcurrencyException)
         {
             await transaction.RollbackAsync();
-            return ServiceResult<object>.FromError(ServiceErrorType.Concurrency, "Data conflict: This inventory was modified by another user. Please reload and try again.");
+            return ServiceResult<TransferOwnershipResponse>.FromError(ServiceErrorType.Concurrency, "Data conflict: This inventory was modified by another user. Please reload and try again.");
         }
 
-        var resultData = new { message = $"Ownership successfully transferred to {newOwner.Email}.", shouldRedirect };
-        return ServiceResult<object>.Success(resultData);
+        var resultData = new TransferOwnershipResponse
+        {
+            Message = $"Ownership successfully transferred to {newOwner.Email}.",
+            ShouldRedirect = shouldRedirect
+        };
+        return ServiceResult<TransferOwnershipResponse>.Success(resultData);
     }
 
     public async Task<ServiceResult<object>> DeleteInventoryAsync(string inventoryId, ClaimsPrincipal user)
