@@ -65,6 +65,9 @@ public class CustomFieldService : ICustomFieldService
         };
         _context.CustomFields.Add(customField);
 
+        // Explicitly touch the parent to ensure consistent version bumping on all schema changes.
+        inventory.Name = inventory.Name;
+
         try
         {
             await _context.SaveChangesAsync();
@@ -78,7 +81,14 @@ public class CustomFieldService : ICustomFieldService
             return ServiceResult<CustomFieldDto>.FromError(ServiceErrorType.General, "A database error occurred. Please check your input (e.g., field name is not too long).");
         }
 
-        var resultDto = new CustomFieldDto { Id = customField.Id, Name = customField.Name, Type = customField.Type.ToString() };
+        var resultDto = new CustomFieldDto
+        {
+            Id = customField.Id,
+            Name = customField.Name,
+            Type = customField.Type.ToString(),
+            DataKey = customField.TargetColumn,
+            NewInventoryVersion = inventory.Version
+        };
         return ServiceResult<CustomFieldDto>.Success(resultDto);
     }
 
@@ -153,10 +163,7 @@ public class CustomFieldService : ICustomFieldService
             return ServiceResult<object>.Success(new { message = "OK" });
 
         var inventory = fieldsToDelete.First().Inventory;
-        if (inventory == null)
-            return ServiceResult<object>.FromError(ServiceErrorType.General, "Could not find the parent inventory for the specified fields.");
-
-        if (fieldsToDelete.Any(f => f.InventoryId != inventory.Id))
+        if (inventory == null || fieldsToDelete.Any(f => f.InventoryId != inventory.Id))
             return ServiceResult<object>.FromError(ServiceErrorType.InvalidInput, "All fields must belong to the same inventory.");
 
         if (inventory.Version != deleteRequest.InventoryVersion)
@@ -167,18 +174,29 @@ public class CustomFieldService : ICustomFieldService
         if (!_accessService.CanManageSettings(inventory, GetUserId(user), IsAdmin(user)))
             return ServiceResult<object>.FromError(ServiceErrorType.Forbidden, "User does not have permission to manage this inventory.");
 
-        var itemsToUpdate = await _context.Items.Where(i => i.InventoryId == inventory.Id).ToListAsync();
+        var itemsQuery = _context.Items.Where(i => i.InventoryId == inventory.Id);
 
         foreach (var field in fieldsToDelete)
         {
-            foreach (var item in itemsToUpdate)
+            switch (field.Type)
             {
-                var propInfo = typeof(Item).GetProperty(field.TargetColumn);
-                propInfo?.SetValue(item, null);
+                case CustomFieldType.String:
+                case CustomFieldType.Text:
+                case CustomFieldType.FileUrl:
+                    await itemsQuery.ExecuteUpdateAsync(s => s.SetProperty(item => EF.Property<string?>(item, field.TargetColumn), (string?)null));
+                    break;
+                case CustomFieldType.Numeric:
+                    await itemsQuery.ExecuteUpdateAsync(s => s.SetProperty(item => EF.Property<decimal?>(item, field.TargetColumn), (decimal?)null));
+                    break;
+                case CustomFieldType.Bool:
+                    await itemsQuery.ExecuteUpdateAsync(s => s.SetProperty(item => EF.Property<bool?>(item, field.TargetColumn), (bool?)null));
+                    break;
             }
         }
 
         _context.CustomFields.RemoveRange(fieldsToDelete);
+
+        inventory.Name = inventory.Name;
 
         try
         {
@@ -188,7 +206,7 @@ public class CustomFieldService : ICustomFieldService
         catch (DbUpdateConcurrencyException)
         {
             await transaction.RollbackAsync();
-            return ServiceResult<object>.FromError(ServiceErrorType.Concurrency, "Data conflict: One or more items were modified by another user during the deletion process. Please reload and try again.");
+            return ServiceResult<object>.FromError(ServiceErrorType.Concurrency, "Data conflict occurred. Please reload and try again.");
         }
 
         var newVersion = inventory.Version;

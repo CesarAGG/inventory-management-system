@@ -21,6 +21,9 @@ function initializeAdminTab(inventoryId, inventoryName, csrfToken, currentUserId
             });
 
             if (!response.ok) {
+                if (response.status === 403) {
+                    throw new Error('Your permissions may have changed. Please reload the page.');
+                }
                 const errorData = await response.json();
                 const errorMessage = errorData.errors?.NewName?.[0] || 'Failed to rename inventory.';
                 throw new Error(errorMessage);
@@ -61,6 +64,9 @@ function initializeAdminTab(inventoryId, inventoryName, csrfToken, currentUserId
             });
 
             if (!response.ok) {
+                if (response.status === 403) {
+                    throw new Error('Your permissions may have changed. Please reload the page.');
+                }
                 let errorMessage = 'Failed to transfer ownership.';
                 try {
                     const errorData = await response.json();
@@ -116,6 +122,9 @@ function initializeAdminTab(inventoryId, inventoryName, csrfToken, currentUserId
                 headers: { 'RequestVerificationToken': csrfToken }
             });
             if (!response.ok) {
+                if (response.status === 403) {
+                    throw new Error('Your permissions may have changed. Please reload the page.');
+                }
                 throw new Error('Failed to delete inventory. You must be the owner or an admin.');
             }
             const data = await response.json();

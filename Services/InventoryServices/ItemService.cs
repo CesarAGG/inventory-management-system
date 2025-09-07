@@ -302,6 +302,6 @@ public class ItemService : IItemService
             return ServiceResult<object>.FromError(ServiceErrorType.Concurrency, "Data conflict: One or more of the selected items were modified by another user. Please reload and try again.");
         }
 
-        return ServiceResult<object>.Success(new { message = "Deleted" });
+        return ServiceResult<object>.Success(new { message = "Deleted", newInventoryVersion = inventory.Version });
     }
 }

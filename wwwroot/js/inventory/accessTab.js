@@ -52,7 +52,15 @@ function initializeAccessTab(inventoryId, csrfToken) {
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
                 body: JSON.stringify(isPublic)
             });
-            if (!response.ok) throw new Error('Failed to update setting.');
+            if (!response.ok) {
+                if (response.status === 403) {
+                    showToast('Your permissions may have changed. Please reload the page.', true);
+                } else {
+                    showToast('Failed to update setting.', true);
+                }
+                isPublicSwitch.checked = !isPublic;
+                return;
+            }
             const result = await response.json();
             updateInventoryVersion(result.newVersion);
             showToast('Public access updated successfully.');
@@ -103,9 +111,16 @@ function initializeAccessTab(inventoryId, csrfToken) {
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
                 body: JSON.stringify(userId)
             });
-            if (!response.ok) throw new Error('Failed to grant access.');
+            if (!response.ok) {
+                if (response.status === 403) {
+                    showToast('Your permissions may have changed. Please reload the page.', true);
+                } else {
+                    showToast('Failed to grant access.', true);
+                }
+                return;
+            }
             const result = await response.json();
-            updateInventoryVersion(result.newInventoryVersion); 
+            updateInventoryVersion(result.newInventoryVersion);
             fetchAccessSettings();
             userSearchInput.value = '';
             userSearchResults.innerHTML = '';
@@ -125,12 +140,15 @@ function initializeAccessTab(inventoryId, csrfToken) {
         if (selectedIds.length === 0) return;
 
         try {
-            const response = await fetch(`/api/inventory/${inventoryId}/access/revoke`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
-                body: JSON.stringify(selectedIds)
-            });
-            if (!response.ok) throw new Error('Failed to revoke access.');
+            const response = await fetch(`/api/inventory/${inventoryId}/access/revoke`, { /* ... */ });
+            if (!response.ok) {
+                if (response.status === 403) {
+                    showToast('Your permissions may have changed. Please reload the page.', true);
+                } else {
+                    showToast('Failed to revoke access.', true);
+                }
+                return;
+            }
             const result = await response.json();
             updateInventoryVersion(result.newVersion);
             fetchAccessSettings();

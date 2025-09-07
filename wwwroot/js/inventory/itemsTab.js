@@ -224,7 +224,11 @@
                     }
                 }
                 showToast('Please correct the highlighted errors.', true);
-            } else {
+            } else if (response.status === 403) {
+                showToast('Your permissions may have changed. Please reload the page.', true);
+                itemModal.hide();
+            }
+             else {
                 showToast(`Failed to ${isEditing ? 'update' : 'add'} item.`, true);
             }
         }
@@ -238,9 +242,15 @@
                 body: JSON.stringify(itemIds)
             });
             deleteItemsModal.hide();
+
             if (response.ok) {
+                const result = await response.json();
+                updateInventoryVersion(result.newInventoryVersion);
                 showToast('Selected items deleted.', false);
                 itemsDataTable.ajax.reload(null, false);
+            }
+            else if (response.status === 403) {
+                showToast('Your permissions may have changed. Please reload the page.', true);
             }
             else { showToast('Failed to delete items.', true); }
         }

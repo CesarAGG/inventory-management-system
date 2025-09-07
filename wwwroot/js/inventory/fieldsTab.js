@@ -33,10 +33,15 @@ function initializeFieldsTab(inventoryId, csrfToken) {
         });
 
         if (response.ok) {
+            const result = await response.json();
+            updateInventoryVersion(result.newInventoryVersion);
+
             newFieldNameInput.value = '';
             showToast('Field added successfully.');
             fetchFields();
             document.dispatchEvent(new Event('refreshItemsData')); // Refresh items table
+        } else if (response.status === 403) {
+            showToast('Your permissions may have changed. Please reload the page.', true);
         } else {
             const error = await response.json().catch(() => ({ message: 'Failed to add field.' }));
             showToast(error.message, true);
@@ -45,38 +50,33 @@ function initializeFieldsTab(inventoryId, csrfToken) {
 
     async function deleteSelectedFields() {
         if (fieldsToDeleteIds.length === 0) return;
-
         const versionElement = document.querySelector('h2[data-inventory-version]');
         const inventoryVersion = versionElement?.dataset.inventoryVersion;
-
         if (!inventoryVersion) {
             showToast('Could not find inventory version. Cannot delete.', true);
             return;
         }
-
         const response = await fetch('/api/inventory/fields/delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
             body: JSON.stringify({ fieldIds: fieldsToDeleteIds, inventoryVersion: parseInt(inventoryVersion, 10) })
         });
-
         deleteFieldModal.hide();
 
-        if (!response.ok) {
+        if (response.ok) {
+            const result = await response.json();
+            showToast('Selected fields deleted successfully.');
+            if (result.newVersion && versionElement) {
+                versionElement.dataset.inventoryVersion = result.newVersion;
+            }
+            fetchFields();
+            document.dispatchEvent(new Event('refreshItemsData'));
+        } else if (response.status === 403) {
+            showToast('Your permissions may have changed. Please reload the page.', true);
+        } else {
             const error = await response.json().catch(() => ({ message: 'Failed to delete selected fields.' }));
             showToast(error.message, true);
-            fieldsToDeleteIds = [];
-            return;
         }
-
-        const result = await response.json();
-        showToast('Selected fields deleted successfully.');
-        if (result.newVersion && versionElement) {
-            versionElement.dataset.inventoryVersion = result.newVersion;
-        }
-
-        fetchFields();
-        document.dispatchEvent(new Event('refreshItemsData')); // Refresh items table
         fieldsToDeleteIds = [];
     }
 
@@ -103,7 +103,10 @@ function initializeFieldsTab(inventoryId, csrfToken) {
             }
             fetchFields();
             document.dispatchEvent(new Event('refreshItemsData')); // Refresh items table
+        } else if (response.status === 403) {
+            showToast('Your permissions may have changed. Please reload the page.', true);
         } else {
+            const result = await response.json();
             showToast(result.message || 'Failed to rename field.', true);
         }
     }
@@ -131,7 +134,11 @@ function initializeFieldsTab(inventoryId, csrfToken) {
             }
             // A reorder also changes the schema, so refresh the items table
             document.dispatchEvent(new Event('refreshItemsData'));
-        } else {
+        } else if (response.status === 403) {
+            showToast('Your permissions may have changed. Please reload the page.', true);
+            fetchFields();
+        }
+        else {
             showToast(result.message || 'Failed to save new order.', true);
             fetchFields();
         }

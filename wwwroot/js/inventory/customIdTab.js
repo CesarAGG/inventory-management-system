@@ -145,6 +145,9 @@ function initializeCustomIdTab(inventoryId, csrfToken) {
             const result = await response.json();
             updateInventoryVersion(result.newVersion);
         }
+        else if (response.status === 403) {
+            showToast('Your permissions may have changed. Please reload the page.', true);
+        }
         else { showToast('Failed to save ID format.', true); }
     }
 
