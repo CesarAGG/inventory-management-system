@@ -1,6 +1,7 @@
 ﻿using InventoryManagementSystem.Data;
 using InventoryManagementSystem.Models;
 using InventoryManagementSystem.Services;
+using InventoryManagementSystem.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -89,8 +90,19 @@ public class AccessController : ControllerBase
 
         var ownerId = inventory.OwnerId;
 
-        var matchingUsers = await _userManager.Users
-            .Where(u => u.Email != null && EF.Functions.ILike(u.Email, $"{query}%"))
+        IQueryable<ApplicationUser> userQuery = _userManager.Users;
+        if (!IsAdmin())
+        {
+            // Non-admins must provide an exact email match (case-insensitive) to prevent enumeration.
+            userQuery = userQuery.Where(u => u.Email != null && u.Email.ToLower() == query.ToLower());
+        }
+        else
+        {
+            // Admins can perform a partial "starts with" search.
+            userQuery = userQuery.Where(u => u.Email != null && EF.Functions.ILike(u.Email, $"{query}%"));
+        }
+
+        var matchingUsers = await userQuery
             .Where(u => u.Id != ownerId && !usersWithPermission.Contains(u.Id))
             .Select(u => new UserSearchDto { Id = u.Id, Email = u.Email! })
             .Take(10)

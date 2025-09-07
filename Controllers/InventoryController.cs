@@ -1,6 +1,7 @@
 ﻿using InventoryManagementSystem.Data;
 using InventoryManagementSystem.Models;
 using InventoryManagementSystem.Helpers;
+using InventoryManagementSystem.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -17,40 +18,6 @@ using System.Text.Json;
 using System.ComponentModel.DataAnnotations;
 
 namespace InventoryManagementSystem.Controllers;
-
-public class CustomFieldDto
-{
-    public string Id { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-    public string Type { get; set; } = string.Empty;
-}
-
-public class ItemDto
-{
-    public string Id { get; set; } = string.Empty;
-    public string CustomId { get; set; } = string.Empty;
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public Dictionary<string, object?> Fields { get; set; } = new();
-}
-
-public class ItemApiRequest
-{
-    public Dictionary<string, object> FieldValues { get; set; } = new();
-}
-
-public class RenameInventoryRequest
-{
-    [Required]
-    [StringLength(100, ErrorMessage = "The inventory name cannot exceed 100 characters.")]
-    public string NewName { get; set; } = string.Empty;
-}
-
-public class TransferOwnershipRequest
-{
-    [Required]
-    [EmailAddress]
-    public string NewOwnerEmail { get; set; } = string.Empty;
-}
 
 [Authorize]
 public class InventoryController : Controller
