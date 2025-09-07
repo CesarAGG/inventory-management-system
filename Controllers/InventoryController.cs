@@ -111,31 +111,28 @@ public class InventoryController : Controller
     [HttpPut]
     [Route("api/inventory/fields/{fieldId}")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> UpdateCustomField(string fieldId, [FromBody] CustomFieldDto fieldUpdate)
+    public async Task<IActionResult> UpdateCustomField(string fieldId, [FromBody] FieldNameUpdateRequest fieldUpdate)
     {
-        var error = await _customFieldService.UpdateCustomFieldAsync(fieldId, fieldUpdate, User);
-        if (error != null) return BadRequest(error);
-        return Ok();
+        var result = await _customFieldService.UpdateCustomFieldAsync(fieldId, fieldUpdate, User);
+        return HandleServiceResult(result);
     }
 
     [HttpPost]
     [Route("api/inventory/fields/delete")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteCustomFields([FromBody] string[] fieldIds)
+    public async Task<IActionResult> DeleteCustomFields([FromBody] FieldDeleteRequest deleteRequest)
     {
-        var error = await _customFieldService.DeleteCustomFieldsAsync(fieldIds, User);
-        if (error != null) return BadRequest(error);
-        return Ok();
+        var result = await _customFieldService.DeleteCustomFieldsAsync(deleteRequest, User);
+        return HandleServiceResult(result);
     }
 
     [HttpPut]
     [Route("api/inventory/{inventoryId}/fields/reorder")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ReorderCustomFields(string inventoryId, [FromBody] string[] orderedFieldIds)
+    public async Task<IActionResult> ReorderCustomFields(string inventoryId, [FromBody] FieldReorderRequest reorderRequest)
     {
-        var error = await _customFieldService.ReorderCustomFieldsAsync(inventoryId, orderedFieldIds, User);
-        if (error != null) return BadRequest(error);
-        return Ok();
+        var result = await _customFieldService.ReorderCustomFieldsAsync(inventoryId, reorderRequest, User);
+        return HandleServiceResult(result);
     }
 
     [HttpGet]

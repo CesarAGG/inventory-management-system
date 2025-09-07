@@ -46,50 +46,97 @@ function initializeFieldsTab(inventoryId, csrfToken) {
     async function deleteSelectedFields() {
         if (fieldsToDeleteIds.length === 0) return;
 
+        const versionElement = document.querySelector('h2[data-inventory-version]');
+        const inventoryVersion = versionElement?.dataset.inventoryVersion;
+
+        if (!inventoryVersion) {
+            showToast('Could not find inventory version. Cannot delete.', true);
+            return;
+        }
+
         const response = await fetch('/api/inventory/fields/delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
-            body: JSON.stringify(fieldsToDeleteIds) // Send the array directly
+            body: JSON.stringify({ fieldIds: fieldsToDeleteIds, inventoryVersion: parseInt(inventoryVersion, 10) })
         });
 
         deleteFieldModal.hide();
 
-        if (response.ok) {
-            document.dispatchEvent(new Event('refreshItemsData'));
-
-            showToast('Selected fields deleted successfully.');
-            fetchFields();
-        } else {
-            showToast('Failed to delete selected fields.', true);
+        if (!response.ok) {
+            // NOTE: The real `handleConcurrencyError` will be added in Part 3.
+            // For now, we just handle the error with a standard toast.
+            const error = await response.json().catch(() => ({ message: 'Failed to delete selected fields.' }));
+            showToast(error.message, true);
+            fieldsToDeleteIds = [];
+            return;
         }
+
+        const result = await response.json();
+        document.dispatchEvent(new Event('refreshItemsData'));
+        showToast('Selected fields deleted successfully.');
+
+        // Correctly parse the response: the controller returns the Data object directly.
+        if (result.newVersion && versionElement) {
+            versionElement.dataset.inventoryVersion = result.newVersion;
+        }
+        fetchFields();
+
         fieldsToDeleteIds = [];
     }
 
     async function updateFieldName(fieldId, newName) {
+        const versionElement = document.querySelector('h2[data-inventory-version]');
+        const inventoryVersion = versionElement?.dataset.inventoryVersion;
+
+        if (!inventoryVersion) {
+            showToast('Could not find inventory version. Cannot save.', true);
+            return;
+        }
+
         const response = await fetch(`/api/inventory/fields/${fieldId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
-            body: JSON.stringify({ name: newName, type: '' })
+            body: JSON.stringify({ name: newName, inventoryVersion: parseInt(inventoryVersion, 10) })
         });
-        if (response.ok) {
-            document.dispatchEvent(new Event('refreshItemsData'));
 
+        const result = await response.json();
+        if (response.ok) {
             showToast('Field renamed successfully.');
+            if (result.newVersion && versionElement) {
+                versionElement.dataset.inventoryVersion = result.newVersion;
+            }
             fetchFields();
+        } else if (response.status === 409) {
+            showToast(result.message, true);
+        } else {
+            showToast('Failed to rename field.', true);
         }
-        else { showToast('Failed to rename field.', true); }
     }
 
     async function reorderFields(orderedIds) {
+        const versionElement = document.querySelector('h2[data-inventory-version]');
+        const inventoryVersion = versionElement?.dataset.inventoryVersion;
+
+        if (!inventoryVersion) {
+            showToast('Could not find inventory version. Cannot save order.', true);
+            fetchFields(); // Revert visual drag-and-drop on error
+            return;
+        }
+
         const response = await fetch(`/api/inventory/${inventoryId}/fields/reorder`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
-            body: JSON.stringify(orderedIds)
+            body: JSON.stringify({ orderedFieldIds: orderedIds, inventoryVersion: parseInt(inventoryVersion, 10) })
         });
+
+        const result = await response.json();
         if (response.ok) {
-            document.dispatchEvent(new Event('refreshItemsData'));
+            if (result.newVersion && versionElement) {
+                versionElement.dataset.inventoryVersion = result.newVersion;
+            }
         } else {
-            showToast('Failed to save new order.', true);
+            showToast(result.message || 'Failed to save new order.', true);
+            fetchFields(); // Revert the UI to match the server state on failure
         }
     }
 

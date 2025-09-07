@@ -2,14 +2,15 @@
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using InventoryManagementSystem.Services;
 
 namespace InventoryManagementSystem.Services.InventoryServices;
 
 public interface ICustomFieldService
 {
-    Task<(CustomFieldDto? Field, object? Error)> AddCustomFieldAsync(string inventoryId, CustomFieldDto newField, ClaimsPrincipal user);
-    Task<(List<CustomFieldDto>? Fields, object? Error)> GetCustomFieldsAsync(string inventoryId, ClaimsPrincipal user);
-    Task<object?> UpdateCustomFieldAsync(string fieldId, CustomFieldDto fieldUpdate, ClaimsPrincipal user);
-    Task<object?> DeleteCustomFieldsAsync(string[] fieldIds, ClaimsPrincipal user);
-    Task<object?> ReorderCustomFieldsAsync(string inventoryId, string[] orderedFieldIds, ClaimsPrincipal user);
+    Task<ServiceResult<CustomFieldDto>> AddCustomFieldAsync(string inventoryId, CustomFieldDto newField, ClaimsPrincipal user);
+    Task<ServiceResult<List<CustomFieldDto>>> GetCustomFieldsAsync(string inventoryId, ClaimsPrincipal user);
+    Task<ServiceResult<object>> UpdateCustomFieldAsync(string fieldId, FieldNameUpdateRequest fieldUpdate, ClaimsPrincipal user);
+    Task<ServiceResult<object>> DeleteCustomFieldsAsync(FieldDeleteRequest deleteRequest, ClaimsPrincipal user);
+    Task<ServiceResult<object>> ReorderCustomFieldsAsync(string inventoryId, FieldReorderRequest reorderRequest, ClaimsPrincipal user);
 }
