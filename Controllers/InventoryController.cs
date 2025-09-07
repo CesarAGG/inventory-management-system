@@ -142,10 +142,14 @@ public class InventoryController : Controller
     [Route("api/inventory/{inventoryId}/id-format")]
     public async Task<IActionResult> GetIdFormat(string inventoryId)
     {
-        var (segments, error) = await _inventoryAdminService.GetIdFormatAsync(inventoryId, User);
-        if (error != null) return StatusCode(403, error); 
+        var result = await _inventoryAdminService.GetIdFormatAsync(inventoryId, User);
+        if (!result.IsSuccess)
+        {
+            return HandleServiceResult(result);
+        }
         var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-        return Content(JsonSerializer.Serialize((IEnumerable<object>)segments!, options), "application/json");
+        var jsonString = JsonSerializer.Serialize((IEnumerable<object>)result.Data!, options);
+        return Content(jsonString, "application/json");
     }
 
     [HttpPut]
@@ -153,9 +157,8 @@ public class InventoryController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveIdFormat(string inventoryId, [FromBody] JsonElement format)
     {
-        var error = await _inventoryAdminService.SaveIdFormatAsync(inventoryId, format, User);
-        if (error != null) return BadRequest(error);
-        return Ok();
+        var result = await _inventoryAdminService.SaveIdFormatAsync(inventoryId, format, User);
+        return HandleServiceResult(result);
     }
 
     [HttpGet]
@@ -204,9 +207,8 @@ public class InventoryController : Controller
     public async Task<IActionResult> RenameInventory(string inventoryId, [FromBody] RenameInventoryRequest request)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
-        var (newName, error) = await _inventoryAdminService.RenameInventoryAsync(inventoryId, request, User);
-        if (error != null) return BadRequest(error);
-        return Ok(new { newName });
+        var result = await _inventoryAdminService.RenameInventoryAsync(inventoryId, request, User);
+        return HandleServiceResult(result);
     }
 
     [HttpPost]
@@ -215,9 +217,8 @@ public class InventoryController : Controller
     public async Task<IActionResult> TransferOwnership(string inventoryId, [FromBody] TransferOwnershipRequest request)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
-        var (message, shouldRedirect, error) = await _inventoryAdminService.TransferOwnershipAsync(inventoryId, request, User);
-        if (error != null) return BadRequest(error);
-        return Ok(new { message, shouldRedirect });
+        var result = await _inventoryAdminService.TransferOwnershipAsync(inventoryId, request, User);
+        return HandleServiceResult(result);
     }
 
     [HttpDelete]
@@ -225,9 +226,8 @@ public class InventoryController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteInventory(string inventoryId)
     {
-        var error = await _inventoryAdminService.DeleteInventoryAsync(inventoryId, User);
-        if (error != null) return BadRequest(error);
-        return Ok(new { message = "Inventory and all its data have been permanently deleted." });
+        var result = await _inventoryAdminService.DeleteInventoryAsync(inventoryId, User);
+        return HandleServiceResult(result);
     }
 
     [AllowAnonymous]
