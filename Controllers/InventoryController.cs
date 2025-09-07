@@ -566,6 +566,7 @@ public class InventoryController : Controller
         {
             ViewData["CanManageSettings"] = true;
             ViewData["CanWrite"] = true;
+            ViewData["CurrentUserId"] = currentUserId;
             return View("Manage", inventory);
         }
         else
@@ -640,12 +641,16 @@ public class InventoryController : Controller
             return BadRequest(new { message = "This user is already the owner." });
         }
 
+        bool shouldRedirect = !User.IsInRole("Admin");
+
         var newOwnerPermission = await _context.InventoryUserPermissions
             .FirstOrDefaultAsync(p => p.InventoryId == inventoryId && p.UserId == newOwner.Id);
         if (newOwnerPermission != null)
         {
             _context.InventoryUserPermissions.Remove(newOwnerPermission);
         }
+        
+        inventory.OwnerId = newOwner.Id;
 
         var oldOwnerId = inventory.OwnerId;
         var oldOwnerPermission = await _context.InventoryUserPermissions
@@ -660,7 +665,11 @@ public class InventoryController : Controller
         await _context.SaveChangesAsync();
         await transaction.CommitAsync();
 
-        return Ok(new { message = $"Ownership successfully transferred to {newOwner.Email}." });
+        return Ok(new
+        {
+            message = $"Ownership successfully transferred to {newOwner.Email}.",
+            shouldRedirect = shouldRedirect
+        });
     }
 
     [HttpDelete]

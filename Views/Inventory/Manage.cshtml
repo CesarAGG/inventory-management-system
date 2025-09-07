@@ -394,22 +394,25 @@
     <script src="~/js/inventory/accessTab.js" asp-append-version="true"></script>
     <script src="~/js/inventory/adminTab.js" asp-append-version="true"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const inventoryId = "@Model.Id";
-            const inventoryName = @Json.Serialize(Model.Name);
-            const csrfToken = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
-            const canWrite = @(ViewData["CanWrite"] as bool? ?? false ? "true" : "false");
-            const canManageSettings = @(ViewData["CanManageSettings"] as bool? ?? false ? "true" : "false");
+    document.addEventListener('DOMContentLoaded', function () {
+        const inventoryId = "@Model.Id";
+        const inventoryName = @Json.Serialize(Model.Name);
+        const csrfToken = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+        const currentUserId = "@(ViewData["CurrentUserId"] as string)";
+        const canWrite = @(ViewData["CanWrite"] as bool? ?? false ? "true" : "false");
+        const canManageSettings = @(ViewData["CanManageSettings"] as bool? ?? false ? "true" : "false");
 
-            initializeItemsTab(inventoryId, csrfToken, canWrite);
+        initializeItemsTab(inventoryId, csrfToken, canWrite);
 
-            if (canManageSettings) {
-                initializeFieldsTab(inventoryId, csrfToken);
-                initializeCustomIdTab(inventoryId, csrfToken);
-                initializeAccessTab(inventoryId, csrfToken);
-                initializeAdminTab(inventoryId, inventoryName, csrfToken);
-                initializePopovers();
-            }
-        });
+        if (canManageSettings) {
+            initializeFieldsTab(inventoryId, csrfToken);
+            initializeCustomIdTab(inventoryId, csrfToken);
+            initializeAccessTab(inventoryId, csrfToken);
+
+            initializeAdminTab(inventoryId, inventoryName, csrfToken, currentUserId, canManageSettings);
+
+            initializePopovers();
+        }
+    });
     </script>
 }

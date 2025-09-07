@@ -1,4 +1,4 @@
-function initializeAdminTab(inventoryId, inventoryName, csrfToken) {
+function initializeAdminTab(inventoryId, inventoryName, csrfToken, currentUserId, canManageSettings) {
     // --- RENAME LOGIC ---
     const renameInput = document.getElementById('renameInventoryInput');
     const renameBtn = document.getElementById('renameInventoryBtn');
@@ -45,8 +45,6 @@ function initializeAdminTab(inventoryId, inventoryName, csrfToken) {
     const transferTargetUserEmailSpan = document.getElementById('transferTargetUserEmail');
     let targetUserEmail = '';
 
-    // In wwwroot/js/inventory/adminTab.js
-
     async function transferOwnership() {
         try {
             const response = await fetch(`/api/inventory/${inventoryId}/transfer`, {
@@ -56,7 +54,7 @@ function initializeAdminTab(inventoryId, inventoryName, csrfToken) {
             });
 
             if (!response.ok) {
-                let errorMessage = 'Failed to transfer ownership.'; 
+                let errorMessage = 'Failed to transfer ownership.';
                 try {
                     const errorData = await response.json();
                     const errorKeys = Object.keys(errorData);
@@ -73,7 +71,10 @@ function initializeAdminTab(inventoryId, inventoryName, csrfToken) {
 
             const data = await response.json();
             showToast(data.message, false);
-            setTimeout(() => { window.location.href = '/User/Index'; }, 2000);
+
+            if (data.shouldRedirect) {
+                setTimeout(() => { window.location.href = '/User/Index'; }, 2000);
+            }
         } catch (error) {
             showToast(error.message, true);
         } finally {
