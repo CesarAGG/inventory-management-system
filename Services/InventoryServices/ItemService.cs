@@ -57,6 +57,55 @@ public class ItemService : IItemService
         return ServiceResult<object>.Success(data);
     }
 
+    private void HydrateItemFromRequest(Item item, ItemApiRequest request, List<CustomField> fields, Dictionary<string, string> validationErrors)
+    {
+        foreach (var field in fields)
+        {
+            if (request.FieldValues.TryGetValue(field.Id, out var value) && value != null)
+            {
+                var propInfo = typeof(Item).GetProperty(field.TargetColumn);
+                if (propInfo != null)
+                {
+                    try
+                    {
+                        var valueStr = value.ToString();
+                        object? convertedValue;
+                        var targetType = Nullable.GetUnderlyingType(propInfo.PropertyType) ?? propInfo.PropertyType;
+                        if (string.IsNullOrEmpty(valueStr)) { convertedValue = null; }
+                        else if (targetType == typeof(bool)) { convertedValue = valueStr.Equals("true", StringComparison.OrdinalIgnoreCase) || valueStr.Equals("on", StringComparison.OrdinalIgnoreCase); }
+                        else { convertedValue = Convert.ChangeType(valueStr, targetType, CultureInfo.InvariantCulture); }
+                        propInfo.SetValue(item, convertedValue);
+                    }
+                    catch (Exception ex) when (ex is FormatException || ex is InvalidCastException)
+                    {
+                        validationErrors[field.Id] = $"Invalid value for '{field.Name}'.";
+                    }
+                }
+            }
+        }
+    }
+
+    private void ApplyCustomId(Item item, Inventory inventory)
+    {
+        if (string.IsNullOrWhiteSpace(inventory.CustomIdFormat))
+        {
+            item.CustomId = string.Empty;
+            item.CustomIdFormatHashApplied = null;
+            return;
+        }
+
+        bool needsNewId = string.IsNullOrEmpty(item.CustomId) || item.CustomIdFormatHashApplied != inventory.CustomIdFormatHash;
+        if (needsNewId)
+        {
+            var segments = JsonIdSegmentDeserializer.Deserialize(inventory.CustomIdFormat);
+            if (segments.Any())
+            {
+                item.CustomId = _customIdService.GenerateId(inventory, segments);
+                item.CustomIdFormatHashApplied = inventory.CustomIdFormatHash;
+            }
+        }
+    }
+
     public async Task<ServiceResult<ItemDto>> CreateItemAsync(string inventoryId, ItemApiRequest request, ClaimsPrincipal user)
     {
         const int maxRetries = 3;
@@ -71,41 +120,10 @@ public class ItemService : IItemService
             var newItem = new Item { Id = Guid.NewGuid().ToString(), InventoryId = inventoryId };
             var validationErrors = new Dictionary<string, string>();
 
-            foreach (var field in fields)
-            {
-                if (request.FieldValues.TryGetValue(field.Id, out var value) && value != null)
-                {
-                    var propInfo = typeof(Item).GetProperty(field.TargetColumn);
-                    if (propInfo != null)
-                    {
-                        try
-                        {
-                            var valueStr = value.ToString();
-                            object? convertedValue;
-                            var targetType = Nullable.GetUnderlyingType(propInfo.PropertyType) ?? propInfo.PropertyType;
-                            if (string.IsNullOrEmpty(valueStr)) { convertedValue = null; }
-                            else if (targetType == typeof(bool)) { convertedValue = valueStr.Equals("true", StringComparison.OrdinalIgnoreCase) || valueStr.Equals("on", StringComparison.OrdinalIgnoreCase); }
-                            else { convertedValue = Convert.ChangeType(valueStr, targetType, CultureInfo.InvariantCulture); }
-                            propInfo.SetValue(newItem, convertedValue);
-                        }
-                        catch (Exception ex) when (ex is FormatException || ex is InvalidCastException)
-                        {
-                            validationErrors[field.Id] = $"Invalid value for '{field.Name}'.";
-                        }
-                    }
-                }
-            }
+            HydrateItemFromRequest(newItem, request, fields, validationErrors);
             if (validationErrors.Any()) { return ServiceResult<ItemDto>.FromValidationErrors(validationErrors); }
 
-            if (!string.IsNullOrWhiteSpace(inventory.CustomIdFormat))
-            {
-                var segments = JsonIdSegmentDeserializer.Deserialize(inventory.CustomIdFormat);
-                if (segments != null && segments.Any())
-                {
-                    newItem.CustomId = _customIdService.GenerateId(inventory, segments);
-                    newItem.CustomIdFormatHashApplied = inventory.CustomIdFormatHash;
-                }
-            }
+            ApplyCustomId(newItem, inventory);
             _context.Items.Add(newItem);
 
             try
@@ -152,47 +170,10 @@ public class ItemService : IItemService
             var fields = await _context.CustomFields.Where(cf => cf.InventoryId == itemToUpdate.InventoryId).AsNoTracking().ToListAsync();
             var validationErrors = new Dictionary<string, string>();
 
-            foreach (var field in fields)
-            {
-                if (request.FieldValues.TryGetValue(field.Id, out var value))
-                {
-                    var propInfo = typeof(Item).GetProperty(field.TargetColumn);
-                    if (propInfo != null)
-                    {
-                        try
-                        {
-                            var valueStr = value?.ToString();
-                            object? convertedValue;
-                            var targetType = Nullable.GetUnderlyingType(propInfo.PropertyType) ?? propInfo.PropertyType;
-                            if (string.IsNullOrEmpty(valueStr)) { convertedValue = null; }
-                            else if (targetType == typeof(bool)) { convertedValue = valueStr.Equals("true", StringComparison.OrdinalIgnoreCase) || valueStr.Equals("on", StringComparison.OrdinalIgnoreCase); }
-                            else { convertedValue = Convert.ChangeType(valueStr, targetType, CultureInfo.InvariantCulture); }
-                            propInfo.SetValue(itemToUpdate, convertedValue);
-                        }
-                        catch (Exception) { validationErrors.Add(field.Id, $"Invalid data format for field '{field.Name}'."); }
-                    }
-                }
-            }
+            HydrateItemFromRequest(itemToUpdate, request, fields, validationErrors);
             if (validationErrors.Any()) { return ServiceResult<object>.FromValidationErrors(validationErrors); }
 
-            if (!string.IsNullOrWhiteSpace(itemToUpdate.Inventory.CustomIdFormat))
-            {
-                bool needsNewId = string.IsNullOrEmpty(itemToUpdate.CustomId) || itemToUpdate.CustomIdFormatHashApplied != itemToUpdate.Inventory.CustomIdFormatHash;
-                if (needsNewId)
-                {
-                    var segments = JsonIdSegmentDeserializer.Deserialize(itemToUpdate.Inventory.CustomIdFormat);
-                    if (segments.Any())
-                    {
-                        itemToUpdate.CustomId = _customIdService.GenerateId(itemToUpdate.Inventory, segments);
-                        itemToUpdate.CustomIdFormatHashApplied = itemToUpdate.Inventory.CustomIdFormatHash;
-                    }
-                }
-            }
-            else
-            {
-                itemToUpdate.CustomId = string.Empty;
-                itemToUpdate.CustomIdFormatHashApplied = null;
-            }
+            ApplyCustomId(itemToUpdate, itemToUpdate.Inventory);
 
             try
             {

@@ -57,11 +57,13 @@ function initializeAdminTab(inventoryId, inventoryName, csrfToken, currentUserId
                 let errorMessage = 'Failed to transfer ownership.';
                 try {
                     const errorData = await response.json();
-                    const errorKeys = Object.keys(errorData);
                     if (errorData.message) {
                         errorMessage = errorData.message;
-                    } else if (errorKeys.length > 0 && Array.isArray(errorData[errorKeys[0]])) {
-                        errorMessage = errorData[errorKeys[0]][0];
+                    } else {
+                        const errorKeys = Object.keys(errorData);
+                        if (errorKeys.length > 0 && Array.isArray(errorData[errorKeys[0]])) {
+                            errorMessage = errorData[errorKeys[0]][0];
+                        }
                     }
                 } catch (e) {
                     console.error("Could not parse error response as JSON.", e);
@@ -72,8 +74,8 @@ function initializeAdminTab(inventoryId, inventoryName, csrfToken, currentUserId
             const data = await response.json();
             showToast(data.message, false);
 
-            if (data.shouldRedirect) {
-                setTimeout(() => { window.location.href = '/User/Index'; }, 2000);
+            if (data.redirectUrl) {
+                setTimeout(() => { window.location.href = data.redirectUrl; }, 2000);
             }
         } catch (error) {
             showToast(error.message, true);
