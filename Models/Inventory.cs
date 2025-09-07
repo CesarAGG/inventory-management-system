@@ -29,6 +29,8 @@ public class Inventory
 
     public string? CustomIdFormatHash { get; set; }
 
+    public uint Version { get; set; }
+
     [ForeignKey("OwnerId")]
     public virtual ApplicationUser? Owner { get; set; }
 

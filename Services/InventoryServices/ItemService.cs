@@ -10,6 +10,7 @@ using System.Globalization;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using InventoryManagementSystem.Services;
 
 namespace InventoryManagementSystem.Services.InventoryServices;
 
@@ -31,12 +32,12 @@ public class ItemService : IItemService
     private string GetUserId(ClaimsPrincipal user) => user.FindFirstValue(ClaimTypes.NameIdentifier)!;
     private bool IsAdmin(ClaimsPrincipal user) => user.IsInRole("Admin");
 
-    public async Task<(object? Data, string? Error)> GetItemsDataAsync(string inventoryId)
+    public async Task<ServiceResult<object>> GetItemsDataAsync(string inventoryId)
     {
         var inventoryExists = await _context.Inventories.AnyAsync(i => i.Id == inventoryId);
         if (!inventoryExists)
         {
-            return (null, "Inventory not found.");
+            return ServiceResult<object>.FromError(ServiceErrorType.NotFound, "Inventory not found.");
         }
 
         var fields = await _context.CustomFields
@@ -52,18 +53,19 @@ public class ItemService : IItemService
             Fields = fields.ToDictionary(field => field.TargetColumn, field => typeof(Item).GetProperty(field.TargetColumn)?.GetValue(item))
         }).ToList();
 
-        return (new { fields, items = itemDtos }, null);
+        var data = new { fields, items = itemDtos };
+        return ServiceResult<object>.Success(data);
     }
 
-    public async Task<(ItemDto? Item, object? Error)> CreateItemAsync(string inventoryId, ItemApiRequest request, ClaimsPrincipal user)
+    public async Task<ServiceResult<ItemDto>> CreateItemAsync(string inventoryId, ItemApiRequest request, ClaimsPrincipal user)
     {
         const int maxRetries = 3;
         for (int i = 0; i < maxRetries; i++)
         {
             await using var transaction = await _context.Database.BeginTransactionAsync();
             var inventory = await _context.Inventories.FirstOrDefaultAsync(inv => inv.Id == inventoryId);
-            if (inventory == null) { await transaction.RollbackAsync(); return (null, new { message = "Inventory not found." }); }
-            if (!await _accessService.CanWrite(inventory, GetUserId(user), IsAdmin(user))) { await transaction.RollbackAsync(); return (null, new { message = "Forbidden." }); }
+            if (inventory == null) { return ServiceResult<ItemDto>.FromError(ServiceErrorType.NotFound, "Inventory not found."); }
+            if (!await _accessService.CanWrite(inventory, GetUserId(user), IsAdmin(user))) { return ServiceResult<ItemDto>.FromError(ServiceErrorType.Forbidden, "User does not have permission to write to this inventory."); }
 
             var fields = await _context.CustomFields.Where(cf => cf.InventoryId == inventoryId).AsNoTracking().ToListAsync();
             var newItem = new Item { Id = Guid.NewGuid().ToString(), InventoryId = inventoryId };
@@ -93,7 +95,7 @@ public class ItemService : IItemService
                     }
                 }
             }
-            if (validationErrors.Any()) { await transaction.RollbackAsync(); return (null, new { message = "Validation failed.", errors = validationErrors }); }
+            if (validationErrors.Any()) { return ServiceResult<ItemDto>.FromValidationErrors(validationErrors); }
 
             if (!string.IsNullOrWhiteSpace(inventory.CustomIdFormat))
             {
@@ -121,7 +123,7 @@ public class ItemService : IItemService
                     CreatedAt = savedItem.CreatedAt,
                     Fields = fields.ToDictionary(field => field.TargetColumn, field => typeof(Item).GetProperty(field.TargetColumn)?.GetValue(savedItem))
                 };
-                return (createdItemDto, null);
+                return ServiceResult<ItemDto>.Success(createdItemDto);
             }
             catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
             {
@@ -129,14 +131,14 @@ public class ItemService : IItemService
                 if (i == maxRetries - 1)
                 {
                     await transaction.RollbackAsync();
-                    return (null, new { message = "Failed to generate a unique item ID after multiple attempts." });
+                    return ServiceResult<ItemDto>.FromError(ServiceErrorType.General, "Failed to generate a unique item ID after multiple attempts.");
                 }
             }
         }
-        return (null, new { message = "An unexpected error occurred while creating the item." });
+        return ServiceResult<ItemDto>.FromError(ServiceErrorType.General, "An unexpected error occurred while creating the item.");
     }
 
-    public async Task<(object? UpdatedItem, object? Error)> UpdateItemAsync(string itemId, ItemApiRequest request, ClaimsPrincipal user)
+    public async Task<ServiceResult<object>> UpdateItemAsync(string itemId, ItemApiRequest request, ClaimsPrincipal user)
     {
         const int maxRetries = 3;
         for (int i = 0; i < maxRetries; i++)
@@ -144,8 +146,8 @@ public class ItemService : IItemService
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
             var itemToUpdate = await _context.Items.Include(it => it.Inventory).FirstOrDefaultAsync(it => it.Id == itemId);
-            if (itemToUpdate == null || itemToUpdate.Inventory == null) { await transaction.RollbackAsync(); return (null, new { message = "Item not found." }); }
-            if (!await _accessService.CanWrite(itemToUpdate.Inventory, GetUserId(user), IsAdmin(user))) { await transaction.RollbackAsync(); return (null, new { message = "Forbidden." }); }
+            if (itemToUpdate == null || itemToUpdate.Inventory == null) { return ServiceResult<object>.FromError(ServiceErrorType.NotFound, "Item not found."); }
+            if (!await _accessService.CanWrite(itemToUpdate.Inventory, GetUserId(user), IsAdmin(user))) { return ServiceResult<object>.FromError(ServiceErrorType.Forbidden, "User does not have permission to write to this inventory."); }
 
             var fields = await _context.CustomFields.Where(cf => cf.InventoryId == itemToUpdate.InventoryId).AsNoTracking().ToListAsync();
             var validationErrors = new Dictionary<string, string>();
@@ -171,7 +173,7 @@ public class ItemService : IItemService
                     }
                 }
             }
-            if (validationErrors.Any()) { await transaction.RollbackAsync(); return (null, validationErrors); }
+            if (validationErrors.Any()) { return ServiceResult<object>.FromValidationErrors(validationErrors); }
 
             if (!string.IsNullOrWhiteSpace(itemToUpdate.Inventory.CustomIdFormat))
             {
@@ -196,7 +198,12 @@ public class ItemService : IItemService
             {
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
-                return (new { message = "OK" }, null);
+                return ServiceResult<object>.Success(new { message = "OK" });
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await transaction.RollbackAsync();
+                return ServiceResult<object>.FromError(ServiceErrorType.Concurrency, "Data conflict: This item was modified by another user. Please reload and try again.");
             }
             catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
             {
@@ -204,31 +211,40 @@ public class ItemService : IItemService
                 if (i == maxRetries - 1)
                 {
                     await transaction.RollbackAsync();
-                    return (null, new { message = "Failed to generate a unique item ID after multiple attempts." });
+                    return ServiceResult<object>.FromError(ServiceErrorType.General, "Failed to generate a unique item ID after multiple attempts.");
                 }
             }
         }
-        return (null, new { message = "An unexpected error occurred while updating the item." });
+        return ServiceResult<object>.FromError(ServiceErrorType.General, "An unexpected error occurred while updating the item.");
     }
 
-    public async Task<object?> DeleteItemsAsync(string[] itemIds, ClaimsPrincipal user)
+    public async Task<ServiceResult<object>> DeleteItemsAsync(string[] itemIds, ClaimsPrincipal user)
     {
-        if (itemIds == null || !itemIds.Any()) return new { message = "No item IDs provided." };
+        if (itemIds == null || !itemIds.Any()) return ServiceResult<object>.FromError(ServiceErrorType.InvalidInput, "No item IDs provided.");
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
         var itemsToDelete = await _context.Items.Where(i => itemIds.Contains(i.Id)).Include(i => i.Inventory).ToListAsync();
-        if (itemsToDelete.Count != itemIds.Length) return new { message = "One or more items could not be found." };
-        if (!itemsToDelete.Any()) return null;
+        if (itemsToDelete.Count != itemIds.Length) return ServiceResult<object>.FromError(ServiceErrorType.NotFound, "One or more items could not be found.");
+        if (!itemsToDelete.Any()) return ServiceResult<object>.Success(new { message = "OK" });
 
         var inventory = itemsToDelete.First().Inventory;
         if (inventory == null || itemsToDelete.Any(i => i.InventoryId != inventory.Id))
-            return new { message = "All items must belong to the same inventory for a batch delete." };
+            return ServiceResult<object>.FromError(ServiceErrorType.InvalidInput, "All items must belong to the same inventory for a batch delete.");
 
-        if (!await _accessService.CanWrite(inventory, GetUserId(user), IsAdmin(user))) return new { message = "Forbidden." };
+        if (!await _accessService.CanWrite(inventory, GetUserId(user), IsAdmin(user))) return ServiceResult<object>.FromError(ServiceErrorType.Forbidden, "User does not have permission to delete items from this inventory.");
 
         _context.Items.RemoveRange(itemsToDelete);
-        await _context.SaveChangesAsync();
-        await transaction.CommitAsync();
-        return null;
+        try
+        {
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await transaction.RollbackAsync();
+            return ServiceResult<object>.FromError(ServiceErrorType.Concurrency, "Data conflict: One or more of the selected items were modified by another user. Please reload and try again.");
+        }
+
+        return ServiceResult<object>.Success(new { message = "Deleted" });
     }
 }

@@ -6,10 +6,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using InventoryManagementSystem.Services;
 using System.Text.Json;
 using InventoryManagementSystem.ViewModels;
 using InventoryManagementSystem.Services.InventoryServices;
+using InventoryManagementSystem.Services;
+using System.Collections.Generic;
 
 namespace InventoryManagementSystem.Controllers;
 
@@ -37,6 +38,25 @@ public class InventoryController : Controller
         _customFieldService = customFieldService;
         _itemService = itemService;
         _inventoryAdminService = inventoryAdminService;
+    }
+
+    private IActionResult HandleServiceResult<T>(ServiceResult<T> result)
+    {
+        switch (result.ErrorType)
+        {
+            case ServiceErrorType.None:
+                return Ok(result.Data);
+            case ServiceErrorType.NotFound:
+                return NotFound(new { message = result.ErrorMessage });
+            case ServiceErrorType.InvalidInput:
+                return BadRequest(result.ValidationErrors ?? new { message = result.ErrorMessage });
+            case ServiceErrorType.Forbidden:
+                return Forbid();
+            case ServiceErrorType.Concurrency:
+                return Conflict(new { message = result.ErrorMessage });
+            default:
+                return StatusCode(500, new { message = result.ErrorMessage ?? "An unexpected error occurred." });
+        }
     }
 
     [HttpGet]
@@ -143,9 +163,8 @@ public class InventoryController : Controller
     [Route("api/inventory/{inventoryId}/items-data")]
     public async Task<IActionResult> GetItemsData(string inventoryId)
     {
-        var (data, error) = await _itemService.GetItemsDataAsync(inventoryId);
-        if (error != null) return NotFound(error);
-        return Ok(data);
+        var result = await _itemService.GetItemsDataAsync(inventoryId);
+        return HandleServiceResult(result);
     }
 
     [HttpPost]
@@ -153,9 +172,12 @@ public class InventoryController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateItem(string inventoryId, [FromBody] ItemApiRequest request)
     {
-        var (item, error) = await _itemService.CreateItemAsync(inventoryId, request, User);
-        if (error != null) return BadRequest(error);
-        return CreatedAtAction(nameof(GetItemsData), new { inventoryId }, item);
+        var result = await _itemService.CreateItemAsync(inventoryId, request, User);
+        if (!result.IsSuccess)
+        {
+            return HandleServiceResult(result);
+        }
+        return CreatedAtAction(nameof(GetItemsData), new { inventoryId }, result.Data);
     }
 
     [HttpPost]
@@ -163,16 +185,8 @@ public class InventoryController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateItem(string itemId, [FromBody] ItemApiRequest request)
     {
-        var (updatedItem, error) = await _itemService.UpdateItemAsync(itemId, request, User);
-        if (error != null)
-        {
-            if (error is Dictionary<string, string> validationErrors)
-            {
-                return BadRequest(validationErrors);
-            }
-            return BadRequest(error);
-        }
-        return Ok(updatedItem);
+        var result = await _itemService.UpdateItemAsync(itemId, request, User);
+        return HandleServiceResult(result);
     }
 
     [HttpPost]
@@ -180,9 +194,8 @@ public class InventoryController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteItems([FromBody] string[] itemIds)
     {
-        var error = await _itemService.DeleteItemsAsync(itemIds, User);
-        if (error != null) return BadRequest(error);
-        return Ok();
+        var result = await _itemService.DeleteItemsAsync(itemIds, User);
+        return HandleServiceResult(result);
     }
 
     [HttpPut]

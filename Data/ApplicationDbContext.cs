@@ -56,6 +56,16 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .IsRequired()
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Configure concurrency token for Inventory
+        builder.Entity<Inventory>()
+            .Property(i => i.Version)
+            .IsRowVersion();
+
+        // Configure concurrency token for Item
+        builder.Entity<Item>()
+            .Property(i => i.Version)
+            .IsRowVersion();
+
         builder.Entity<CustomField>()
             .HasIndex(cf => new { cf.InventoryId, cf.TargetColumn })
             .IsUnique();
