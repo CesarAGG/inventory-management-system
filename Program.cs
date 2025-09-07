@@ -8,6 +8,7 @@ using System;
 using System.Threading.Tasks;
 using System.Text.Json.Serialization;
 using System.Text.Json;
+using InventoryManagementSystem.Services.InventoryServices;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,6 +44,10 @@ builder.Services.AddAuthentication()
 
 builder.Services.AddScoped<ICustomIdService, CustomIdService>();
 builder.Services.AddScoped<IInventoryAccessService, InventoryAccessService>();
+
+builder.Services.AddScoped<ICustomFieldService, CustomFieldService>();
+builder.Services.AddScoped<IItemService, ItemService>();
+builder.Services.AddScoped<IInventoryAdminService, InventoryAdminService>();
 
 builder.Services.AddControllersWithViews()
     .AddJsonOptions(options =>
