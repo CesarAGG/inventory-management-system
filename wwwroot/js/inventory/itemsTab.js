@@ -13,16 +13,20 @@
 
     // --- FUNCTION DEFINITIONS ---
     async function fetchItemsAndSchema() {
-        const response = await fetch(`/api/inventory/${inventoryId}/items-data`);
-        if (!response.ok) {
-            showToast('Failed to load items.', true);
-            return;
+        try {
+            const response = await fetch(`/api/inventory/${inventoryId}/items-data`);
+            if (!response.ok) throw new Error('Failed to load items data.');
+            const data = await response.json();
+            itemSchema = data.fields;
+            if (canWrite) {
+                buildItemModalForm(itemSchema);
+            }
+            renderItemsUI(itemSchema, data.items);
+        } catch (error) {
+            showToast(error.message, true);
+            itemsTableHead.innerHTML = '<tr><th>Error</th></tr>';
+            itemsTableBody.innerHTML = `<tr><td>Could not load item data.</td></tr>`;
         }
-        const data = await response.json();
-        itemSchema = data.fields;
-
-        buildItemModalForm(itemSchema);
-        renderItemsUI(itemSchema, data.items);
     }
 
     function convertItemToRowDataArray(item, fields) {
@@ -116,6 +120,24 @@
         });
     }
 
+    function buildItemModalForm(fields) {
+        if (!canWrite) return;
+        const itemModalBody = document.querySelector('#itemModal .modal-body');
+        if (!itemModalBody) return;
+        let formHtml = '';
+        fields.forEach(field => {
+            formHtml += `<div class="mb-3"><label for="item-field-${field.id}" class="form-label">${escapeHtml(field.name)}</label>`;
+            switch (field.type) {
+                case 'Text': formHtml += `<textarea class="form-control" id="item-field-${field.id}" name="${field.id}"></textarea>`; break;
+                case 'Bool': formHtml += `<div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="item-field-${field.id}" name="${field.id}"></div>`; break;
+                case 'Numeric': formHtml += `<input type="number" step="any" class="form-control" id="item-field-${field.id}" name="${field.id}">`; break;
+                default: formHtml += `<input type="text" class="form-control" id="item-field-${field.id}" name="${field.id}">`;
+            }
+            formHtml += `</div>`;
+        });
+        itemModalBody.innerHTML = formHtml;
+    }
+
     // --- EVENT LISTENERS ---
     const dtElement = document.getElementById('itemsDataTable');
 
@@ -143,29 +165,6 @@
         const confirmDeleteItemsBtn = document.getElementById('confirmDeleteItemsBtn');
 
         // --- FUNCTIONS (Write Permissions Only) ---
-        function buildItemModalForm(fields) {
-            const itemModalBody = document.querySelector('#itemModal .modal-body');
-            let formHtml = '';
-            fields.forEach(field => {
-                formHtml += `<div class="mb-3"><label for="item-field-${field.id}" class="form-label">${escapeHtml(field.name)}</label>`;
-                switch (field.type) {
-                    case 'Text':
-                        formHtml += `<textarea class="form-control" id="item-field-${field.id}" name="${field.id}"></textarea>`;
-                        break;
-                    case 'Bool':
-                        formHtml += `<div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="item-field-${field.id}" name="${field.id}"></div>`;
-                        break;
-                    case 'Numeric':
-                        formHtml += `<input type="number" step="any" class="form-control" id="item-field-${field.id}" name="${field.id}">`;
-                        break;
-                    default: // String, FileUrl
-                        formHtml += `<input type="text" class="form-control" id="item-field-${field.id}" name="${field.id}">`;
-                }
-                formHtml += `</div>`;
-            });
-            itemModalBody.innerHTML = formHtml;
-        }
-
         function openItemModal(itemData = null) {
             itemForm.reset();
             itemForm.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));

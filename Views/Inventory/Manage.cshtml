@@ -26,6 +26,9 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="access-tab" data-bs-toggle="tab" data-bs-target="#access-tab-pane" type="button" role="tab" aria-controls="access-tab-pane" aria-selected="false">Access</button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="admin-tab" data-bs-toggle="tab" data-bs-target="#admin-tab-pane" type="button" role="tab">Administration</button>
+            </li>
         </ul>
 
         <div class="tab-content" id="inventoryTabsContent">
@@ -189,6 +192,60 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Administration Tab Pane -->
+            <div class="tab-pane fade" id="admin-tab-pane" role="tabpanel">
+                <div class="row mt-3">
+                    <!-- Rename Card -->
+                    <div class="col-md-12 mb-4">
+                        <div class="card">
+                            <div class="card-header">Rename Inventory</div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="renameInventoryInput" class="form-label">New Inventory Name</label>
+                                    <div class="input-group">
+                                        <input type="text" id="renameInventoryInput" class="form-control" value="@Model.Name">
+                                        <button id="renameInventoryBtn" class="btn btn-outline-primary">Rename</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Transfer Ownership Card -->
+                    <div class="col-md-12 mb-4">
+                        <div class="card border-warning">
+                            <div class="card-header bg-warning text-dark">Transfer Ownership</div>
+                            <div class="card-body">
+                                <p class="card-text">Transfer this inventory to another user. This action is irreversible. You will lose owner permissions and will only retain access if the new owner grants it to you.</p>
+                                <div class="form-group">
+                                    <label for="transferOwnerInput" class="form-label">New Owner's Email Address</label>
+                                    <div class="input-group">
+                                        <input type="email" id="transferOwnerInput" class="form-control" placeholder="user@example.com">
+                                        <button id="transferOwnerBtn" class="btn btn-outline-warning">Transfer</button>
+                                    </div>
+                                    <div id="transferUserSearchResult" class="mt-2"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Delete Inventory Card -->
+                    <div class="col-md-12">
+                        <div class="card border-danger">
+                            <div class="card-header bg-danger text-white">Delete Inventory</div>
+                            <div class="card-body">
+                                <p class="card-text">Once you delete an inventory, there is no going back. All items, custom fields, and access permissions associated with it will be permanently deleted.</p>
+                                <div class="form-group">
+                                    <label for="deleteConfirmInput" class="form-label">To confirm, type the name of the inventory: <strong class="text-danger">@Model.Name</strong></label>
+                                    <input type="text" id="deleteConfirmInput" class="form-control mb-2" autocomplete="off">
+                                    <button id="deleteInventoryBtn" class="btn btn-danger w-100" disabled>Delete this Inventory</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -258,6 +315,34 @@
     </div>
 </div>
 
+<!-- Transfer Confirmation Modal -->
+<div class="modal fade" id="transferConfirmModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Confirm Ownership Transfer</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <p>Are you sure you want to transfer this inventory to <strong id="transferTargetUserEmail"></strong>?</p>
+                <p class="text-danger">This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-warning" id="confirmTransferBtn">Confirm Transfer</button></div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteInventoryConfirmModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Confirm Inventory Deletion</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <p>Are you sure you want to permanently delete this inventory?</p>
+                <p class="text-danger">All items, custom fields, and permissions will be lost forever. This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-danger" id="confirmDeleteInventoryBtn">Confirm Deletion</button></div>
+        </div>
+    </div>
+</div>
+
 @section Styles {
     <style>
         .expandable-cell .truncated-text {
@@ -307,11 +392,12 @@
     <script src="~/js/inventory/fieldsTab.js" asp-append-version="true"></script>
     <script src="~/js/inventory/customIdTab.js" asp-append-version="true"></script>
     <script src="~/js/inventory/accessTab.js" asp-append-version="true"></script>
+    <script src="~/js/inventory/adminTab.js" asp-append-version="true"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const inventoryId = "@Model.Id";
+            const inventoryName = @Json.Serialize(Model.Name);
             const csrfToken = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
-
             const canWrite = @(ViewData["CanWrite"] as bool? ?? false ? "true" : "false");
             const canManageSettings = @(ViewData["CanManageSettings"] as bool? ?? false ? "true" : "false");
 
@@ -321,6 +407,7 @@
                 initializeFieldsTab(inventoryId, csrfToken);
                 initializeCustomIdTab(inventoryId, csrfToken);
                 initializeAccessTab(inventoryId, csrfToken);
+                initializeAdminTab(inventoryId, inventoryName, csrfToken);
                 initializePopovers();
             }
         });

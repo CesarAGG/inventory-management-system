@@ -14,6 +14,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using InventoryManagementSystem.Services;
 using System.Text.Json;
+using System.ComponentModel.DataAnnotations;
 
 namespace InventoryManagementSystem.Controllers;
 
@@ -35,6 +36,20 @@ public class ItemDto
 public class ItemApiRequest
 {
     public Dictionary<string, object> FieldValues { get; set; } = new();
+}
+
+public class RenameInventoryRequest
+{
+    [Required]
+    [StringLength(100, ErrorMessage = "The inventory name cannot exceed 100 characters.")]
+    public string NewName { get; set; } = string.Empty;
+}
+
+public class TransferOwnershipRequest
+{
+    [Required]
+    [EmailAddress]
+    public string NewOwnerEmail { get; set; } = string.Empty;
 }
 
 [Authorize]
@@ -303,12 +318,15 @@ public class InventoryController : Controller
     }
 
     [HttpGet]
+    [AllowAnonymous]
     [Route("api/inventory/{inventoryId}/items-data")]
     public async Task<IActionResult> GetItemsData(string inventoryId)
     {
-        var inventory = await _context.Inventories.AsNoTracking().FirstOrDefaultAsync(i => i.Id == inventoryId);
-        if (inventory == null) return NotFound();
-        if (!_accessService.CanManageSettings(inventory, GetCurrentUserId(), IsAdmin())) return Forbid();
+        var inventoryExists = await _context.Inventories.AnyAsync(i => i.Id == inventoryId);
+        if (!inventoryExists)
+        {
+            return NotFound();
+        }
 
         var fields = await _context.CustomFields
             .Where(cf => cf.InventoryId == inventoryId).OrderBy(cf => cf.Order).AsNoTracking()
@@ -556,6 +574,118 @@ public class InventoryController : Controller
             ViewData["CanWrite"] = canWrite;
             return View("View", inventory);
         }
+    }
+
+    [HttpPut]
+    [Route("api/inventory/{inventoryId}/rename")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RenameInventory(string inventoryId, [FromBody] RenameInventoryRequest request)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        var inventory = await _context.Inventories.FirstOrDefaultAsync(i => i.Id == inventoryId);
+        if (inventory == null)
+        {
+            return NotFound();
+        }
+
+        if (!_accessService.CanManageSettings(inventory, GetCurrentUserId(), IsAdmin()))
+        {
+            return Forbid();
+        }
+
+        inventory.Name = request.NewName;
+        await _context.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return Ok(new { newName = inventory.Name });
+    }
+
+    [HttpPost]
+    [Route("api/inventory/{inventoryId}/transfer")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> TransferOwnership(string inventoryId, [FromBody] TransferOwnershipRequest request)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        var inventory = await _context.Inventories.FirstOrDefaultAsync(i => i.Id == inventoryId);
+        if (inventory == null)
+        {
+            return NotFound(new { message = "Inventory not found." });
+        }
+
+        if (!_accessService.CanManageSettings(inventory, GetCurrentUserId(), IsAdmin()))
+        {
+            return Forbid();
+        }
+
+        var newOwner = await _userManager.FindByEmailAsync(request.NewOwnerEmail);
+        if (newOwner == null)
+        {
+            return BadRequest(new { message = "The specified user does not exist." });
+        }
+
+        if (newOwner.Id == inventory.OwnerId)
+        {
+            return BadRequest(new { message = "This user is already the owner." });
+        }
+
+        var newOwnerPermission = await _context.InventoryUserPermissions
+            .FirstOrDefaultAsync(p => p.InventoryId == inventoryId && p.UserId == newOwner.Id);
+        if (newOwnerPermission != null)
+        {
+            _context.InventoryUserPermissions.Remove(newOwnerPermission);
+        }
+
+        var oldOwnerId = inventory.OwnerId;
+        var oldOwnerPermission = await _context.InventoryUserPermissions
+            .FirstOrDefaultAsync(p => p.InventoryId == inventoryId && p.UserId == oldOwnerId);
+        if (oldOwnerPermission != null)
+        {
+            _context.InventoryUserPermissions.Remove(oldOwnerPermission);
+        }
+
+        inventory.OwnerId = newOwner.Id;
+
+        await _context.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return Ok(new { message = $"Ownership successfully transferred to {newOwner.Email}." });
+    }
+
+    [HttpDelete]
+    [Route("api/inventory/{inventoryId}/delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteInventory(string inventoryId)
+    {
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        var inventory = await _context.Inventories.FirstOrDefaultAsync(i => i.Id == inventoryId);
+        if (inventory == null)
+        {
+            return NotFound();
+        }
+
+        if (!_accessService.CanManageSettings(inventory, GetCurrentUserId(), IsAdmin()))
+        {
+            return Forbid();
+        }
+
+        _context.Inventories.Remove(inventory);
+        await _context.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return Ok(new { message = "Inventory and all its data have been permanently deleted." });
     }
 
     [NonAction]

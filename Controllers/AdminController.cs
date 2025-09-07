@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Security.Claims;
+using Npgsql;
 
 namespace InventoryManagementSystem.Controllers;
 
@@ -71,9 +72,40 @@ public class AdminController : Controller
             .Where(u => selectedUserIds.Contains(u.Id))
             .ToListAsync();
 
+        var deletedCount = 0;
         foreach (var user in usersToDelete)
         {
-            await _userManager.DeleteAsync(user);
+            try
+            {
+                var result = await _userManager.DeleteAsync(user);
+                if (result.Succeeded)
+                {
+                    deletedCount++;
+                }
+                else
+                {
+                    // Handle other potential Identity errors, e.g., concurrency failure
+                    TempData["ErrorMessage"] = $"Could not delete user {user.Email}. An unexpected error occurred.";
+                }
+            }
+            catch (DbUpdateException ex)
+            {
+                // Check if the inner exception is the specific PostgreSQL foreign key violation.
+                if (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23503")
+                {
+                    TempData["ErrorMessage"] = $"Cannot delete user {user.Email} because they own one or more inventories. Please transfer ownership of their inventories first.";
+                }
+                else
+                {
+                    // Handle other, unexpected database errors.
+                    TempData["ErrorMessage"] = $"A database error occurred while trying to delete {user.Email}.";
+                }
+            }
+        }
+
+        if (deletedCount > 0)
+        {
+            TempData["SuccessMessage"] = $"{deletedCount} user(s) deleted successfully.";
         }
 
         return RedirectToAction(nameof(Index));
