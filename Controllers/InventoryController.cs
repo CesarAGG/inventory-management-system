@@ -144,8 +144,9 @@ public class InventoryController : Controller
         {
             return HandleServiceResult(result);
         }
+
         var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-        var jsonString = JsonSerializer.Serialize((IEnumerable<object>)result.Data!, options);
+        var jsonString = JsonSerializer.Serialize(result.Data, options);
         return Content(jsonString, "application/json");
     }
 
