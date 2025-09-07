@@ -208,7 +208,7 @@
             const apiUrl = isEditing ? `/api/inventory/items/${itemId}` : `/api/inventory/${inventoryId}/items`;
 
             const response = await fetch(apiUrl, {
-                method: isEditing ? 'PUT' : 'POST',
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
                 body: JSON.stringify({ fieldValues: fieldValues })
             });
@@ -216,17 +216,7 @@
             if (response.ok) {
                 showToast(`Item ${isEditing ? 'updated' : 'added'} successfully.`);
                 itemModal.hide();
-
-                const contentLength = response.headers.get('content-length');
-                if (contentLength && parseInt(contentLength, 10) > 0) {
-                    const createdItem = await response.json();
-                    if (itemsDataTable) {
-                        const newRowData = convertItemToRowDataArray(createdItem, itemSchema);
-                        itemsDataTable.row.add(newRowData).draw();
-                    }
-                } else {
-                    fetchItemsAndSchema();
-                }
+                fetchItemsAndSchema();
             }
             else if (response.status === 400) {
                 const errors = await response.json();
@@ -260,7 +250,7 @@
                 body: JSON.stringify(itemIds)
             });
             deleteItemsModal.hide();
-            if (response.ok) { showToast('Selected items deleted.', true); fetchItemsAndSchema(); }
+            if (response.ok) { showToast('Selected items deleted.', false); fetchItemsAndSchema(); }
             else { showToast('Failed to delete items.', true); }
         }
 
@@ -282,15 +272,33 @@
 
         itemForm.addEventListener('submit', (e) => { e.preventDefault(); saveItem(); });
 
-        editSelectedItemBtn.addEventListener('click', async () => {
+        editSelectedItemBtn.addEventListener('click', () => {
             const selectedCheckbox = document.querySelector('.item-checkbox:checked');
-            if (!selectedCheckbox) return;
-            try {
-                const response = await fetch(`/api/inventory/items/${selectedCheckbox.value}`);
-                if (!response.ok) throw new Error('Error fetching item details.');
-                const itemData = await response.json();
-                openItemModal(itemData);
-            } catch (error) { showToast(error.message, true); }
+            if (!selectedCheckbox || !itemsDataTable) return;
+
+            // Find the row node for the checked box to get its index
+            const rowNode = selectedCheckbox.closest('tr');
+            if (!rowNode) return;
+            const rowIndex = itemsDataTable.row(rowNode).index();
+            const rowData = itemsDataTable.row(rowIndex).data();
+
+            if (!rowData) {
+                showToast('Could not find data for the selected item.', true);
+                return;
+            }
+
+            // Reconstruct the itemData object in the format openItemModal expects
+            const itemData = {
+                id: rowData[0].id,
+                fields: {}
+            };
+
+            itemSchema.forEach((field, index) => {
+                // Data for custom fields starts at index 3 in the rowData array
+                itemData.fields[field.targetColumn] = rowData[index + 3];
+            });
+
+            openItemModal(itemData);
         });
 
         deleteSelectedItemsBtn.addEventListener('click', () => {

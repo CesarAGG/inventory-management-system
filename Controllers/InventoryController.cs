@@ -158,13 +158,20 @@ public class InventoryController : Controller
         return CreatedAtAction(nameof(GetItemsData), new { inventoryId }, item);
     }
 
-    [HttpPut]
+    [HttpPost]
     [Route("api/inventory/items/{itemId}")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateItem(string itemId, [FromBody] ItemApiRequest request)
     {
         var (updatedItem, error) = await _itemService.UpdateItemAsync(itemId, request, User);
-        if (error != null) return BadRequest(error);
+        if (error != null)
+        {
+            if (error is Dictionary<string, string> validationErrors)
+            {
+                return BadRequest(validationErrors);
+            }
+            return BadRequest(error);
+        }
         return Ok(updatedItem);
     }
 
