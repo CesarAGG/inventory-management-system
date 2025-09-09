@@ -117,7 +117,7 @@ public class InventoryController : Controller
     [HttpPut]
     [Route("api/inventory/fields/{fieldId}")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> UpdateCustomField(string fieldId, [FromBody] FieldNameUpdateRequest fieldUpdate)
+    public async Task<IActionResult> UpdateCustomField(string fieldId, [FromBody] UpdateFieldRequest fieldUpdate)
     {
         var result = await _customFieldService.UpdateCustomFieldAsync(fieldId, fieldUpdate, User);
         return HandleServiceResult(result);
@@ -180,6 +180,20 @@ public class InventoryController : Controller
     {
         var result = await _itemService.GetItemsForDataTableAsync(inventoryId, request);
         return HandleServiceResult(result);
+    }
+
+    [HttpPost]
+    [Route("api/inventory/{inventoryId}/regenerate-id")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RegenerateId(string inventoryId, [FromBody] RegenerateIdRequest request)
+    {
+        var result = await _itemService.RegenerateIdAsync(inventoryId, request.InventoryVersion, User);
+        if (!result.IsSuccess)
+        {
+            return HandleServiceResult(result);
+        }
+
+        return Ok(new { id = result.Data.Id, boundaries = result.Data.Boundaries });
     }
 
     [HttpPost]

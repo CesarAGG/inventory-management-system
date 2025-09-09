@@ -1,131 +1,101 @@
 function initializeAccessTab(inventoryId, csrfToken) {
-    // --- CONSTANT DECLARATIONS ---
     const accessTabEl = document.getElementById('access-tab');
     const isPublicSwitch = document.getElementById('isPublicSwitch');
-    const userSearchInput = document.getElementById('userSearchInput');
-    const userSearchBtn = document.getElementById('userSearchBtn');
-    const userSearchResults = document.getElementById('userSearchResults');
-    const grantedUsersList = document.getElementById('grantedUsersList');
     const revokeSelectedBtn = document.getElementById('revokeSelectedBtn');
-    const selectAllPermissionsCheckbox = document.getElementById('selectAllPermissionsCheckbox');
-    let searchDebounceTimer;
-    let searchAbortController = new AbortController();
+    let grantedUsersTable = null;
 
-    // --- FUNCTION DEFINITIONS ---
     function getInventoryVersion() {
         return parseInt(document.querySelector('h2[data-inventory-version]').dataset.inventoryVersion, 10);
     }
 
-    async function fetchAccessSettings() {
+    async function fetchIsPublic() {
         try {
             const response = await fetch(`/api/inventory/${inventoryId}/access`);
-            if (!response.ok) throw new Error('Failed to fetch settings.');
-            const settings = await response.json();
-
-            isPublicSwitch.checked = settings.isPublic;
-            renderGrantedUsers(settings.permissions);
+            if (response.ok) {
+                const settings = await response.json();
+                isPublicSwitch.checked = settings.isPublic;
+            } else {
+                showToast("Could not load public access setting.", true);
+            }
         } catch (error) {
-            showToast(error.message, true);
+            console.error('Failed to fetch public status.', error);
+            showToast("An error occurred while loading settings.", true);
         }
     }
 
-    function renderGrantedUsers(permissions) {
-        grantedUsersList.innerHTML = '';
-        if (permissions.length === 0) {
-            grantedUsersList.innerHTML = '<li class="list-group-item text-muted">No users have been granted specific access.</li>';
-        } else {
-            permissions.forEach(p => {
-                const li = document.createElement('li');
-                li.className = 'list-group-item';
-                li.dataset.userId = p.userId;
-                li.innerHTML = `
-                <input class="form-check-input me-2 permission-checkbox" type="checkbox" value="${escapeHtml(p.userId)}">
-                <span>${escapeHtml(p.userEmail)}</span>
-            `;
-                grantedUsersList.appendChild(li);
-            });
-        }
-        updateRevokeButtonState();
+    function initializeGrantedUsersTable() {
+        grantedUsersTable = new DataTable('#grantedUsersTable', {
+            processing: true,
+            serverSide: true,
+            ajax: {
+                url: `/api/inventory/${inventoryId}/granted-users`,
+                type: 'POST',
+                data: function (d) {
+                    d.__RequestVerificationToken = csrfToken;
+                },
+                error: function () {
+                    if ($.fn.DataTable.isDataTable('#grantedUsersTable')) {
+                        showToast("Could not load user list.", true);
+                    }
+                }
+            },
+            columns: [
+                {
+                    data: 'userId', orderable: false, render: (data) =>
+                        `<input class="form-check-input permission-checkbox" type="checkbox" value="${escapeHtml(data)}">`
+                },
+                { data: 'userName' },
+                { data: 'userEmail' }
+            ],
+            order: [[1, 'asc']],
+            dom: 'rt<"d-flex justify-content-between align-items-center"ip>',
+        });
+
+        $('#grantedUsersTable').on('draw.dt', function () {
+            $('#selectAllPermissionsCheckbox').prop('checked', false);
+            updateRevokeButtonState();
+        });
+
+        $('#grantedUsersTable').on('change', '.permission-checkbox, #selectAllPermissionsCheckbox', function () {
+            if (this.id === 'selectAllPermissionsCheckbox') {
+                $('#grantedUsersTable .permission-checkbox').prop('checked', this.checked);
+            }
+            updateRevokeButtonState();
+        });
+    }
+
+    function updateRevokeButtonState() {
+        const selectedCount = $('#grantedUsersTable .permission-checkbox:checked').length;
+        revokeSelectedBtn.disabled = selectedCount === 0;
     }
 
     async function updatePublicAccess() {
-        const isPublic = isPublicSwitch.checked;
-        const payload = {
-            isPublic: isPublic,
-            inventoryVersion: getInventoryVersion()
-        };
-
+        const payload = { isPublic: isPublicSwitch.checked, inventoryVersion: getInventoryVersion() };
         try {
             const response = await fetch(`/api/inventory/${inventoryId}/access/public`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
                 body: JSON.stringify(payload)
             });
-
-            if (response.status === 409) {
+            if (response.ok) {
+                const result = await response.json();
+                updateInventoryVersion(result.newVersion);
+                showToast('Public access updated successfully.');
+            } else if (response.status === 409) {
                 window.handleConcurrencyError();
-                fetchAccessSettings(); // Re-fetch to show the current state
-                return;
-            }
-
-            if (!response.ok) {
-                if (response.status === 403) {
-                    showToast('Your permissions may have changed. Please reload the page.', true);
-                } else {
-                    showToast('Failed to update setting.', true);
-                }
-                isPublicSwitch.checked = !isPublic;
-                return;
-            }
-            const result = await response.json();
-            updateInventoryVersion(result.newVersion);
-            showToast('Public access updated successfully.');
-        } catch (error) {
-            showToast(error.message, true);
-            isPublicSwitch.checked = !isPublic;
-        }
-    }
-
-    async function searchUsers() {
-        const query = userSearchInput.value.trim();
-        userSearchResults.innerHTML = '';
-        if (!query) return;
-
-        searchAbortController.abort();
-        searchAbortController = new AbortController();
-        const signal = searchAbortController.signal;
-
-        try {
-            const response = await fetch(`/api/inventory/${inventoryId}/access/search-users?query=${encodeURIComponent(query)}`, { signal });
-            if (!response.ok) throw new Error('Search failed.');
-            const users = await response.json();
-
-            userSearchResults.innerHTML = '';
-            if (users.length === 0) {
-                userSearchResults.innerHTML = '<div class="list-group-item text-muted fst-italic">No matching user found.</div>';
+                fetchIsPublic();
             } else {
-                users.forEach(user => {
-                    const item = document.createElement('a');
-                    item.href = '#';
-                    item.className = 'list-group-item list-group-item-action';
-                    item.dataset.userId = user.id;
-                    item.textContent = escapeHtml(user.email);
-                    userSearchResults.appendChild(item);
-                });
+                showToast('Failed to update public access.', true);
+                isPublicSwitch.checked = !isPublicSwitch.checked;
             }
         } catch (error) {
-            if (error.name !== 'AbortError') {
-                showToast(error.message, true);
-            }
+            showToast('An error occurred.', true);
+            isPublicSwitch.checked = !isPublicSwitch.checked;
         }
     }
 
     async function grantAccess(userId) {
-        const payload = {
-            userId: userId,
-            inventoryVersion: getInventoryVersion()
-        };
-
+        const payload = { userId: userId, inventoryVersion: getInventoryVersion() };
         try {
             const response = await fetch(`/api/inventory/${inventoryId}/access/grant`, {
                 method: 'POST',
@@ -133,45 +103,29 @@ function initializeAccessTab(inventoryId, csrfToken) {
                 body: JSON.stringify(payload)
             });
 
-            if (response.status === 409) {
+            if (response.ok) {
+                const result = await response.json();
+                updateInventoryVersion(result.newInventoryVersion);
+                showToast(`Access granted to ${escapeHtml(result.userName)}.`);
+                grantedUsersTable.ajax.reload();
+            } else if (response.status === 409) {
                 window.handleConcurrencyError();
-                fetchAccessSettings(); // Re-fetch to show the current state
-                return;
+            } else {
+                showToast('Failed to grant access.', true);
             }
-
-            if (!response.ok) {
-                if (response.status === 403) {
-                    showToast('Your permissions may have changed. Please reload the page.', true);
-                } else {
-                    showToast('Failed to grant access.', true);
-                }
-                return;
-            }
-            const result = await response.json();
-            updateInventoryVersion(result.newInventoryVersion);
-            fetchAccessSettings();
-            userSearchInput.value = '';
-            userSearchResults.innerHTML = '';
-            showToast('Access granted successfully.');
         } catch (error) {
-            showToast(error.message, true);
+            showToast('An error occurred while granting access.', true);
         }
     }
 
-    function updateRevokeButtonState() {
-        const selectedCount = grantedUsersList.querySelectorAll('.permission-checkbox:checked').length;
-        revokeSelectedBtn.disabled = selectedCount === 0;
-    }
-
     async function revokeSelectedPermissions() {
-        const selectedIds = Array.from(grantedUsersList.querySelectorAll('.permission-checkbox:checked')).map(cb => cb.value);
+        const selectedIds = $('#grantedUsersTable .permission-checkbox:checked').map(function () {
+            return $(this).val();
+        }).get();
+
         if (selectedIds.length === 0) return;
 
-        const payload = {
-            userIds: selectedIds,
-            inventoryVersion: getInventoryVersion()
-        };
-
+        const payload = { userIds: selectedIds, inventoryVersion: getInventoryVersion() };
         try {
             const response = await fetch(`/api/inventory/${inventoryId}/access/revoke`, {
                 method: 'POST',
@@ -179,63 +133,66 @@ function initializeAccessTab(inventoryId, csrfToken) {
                 body: JSON.stringify(payload)
             });
 
-            if (response.status === 409) {
+            if (response.ok) {
+                const result = await response.json();
+                updateInventoryVersion(result.newVersion);
+                showToast('Access revoked for selected users.');
+                grantedUsersTable.ajax.reload();
+            } else if (response.status === 409) {
                 window.handleConcurrencyError();
-                fetchAccessSettings(); // Re-fetch to show the current state
-                return;
+            } else {
+                showToast('Failed to revoke access.', true);
             }
-
-            if (!response.ok) {
-                if (response.status === 403) {
-                    showToast('Your permissions may have changed. Please reload the page.', true);
-                } else {
-                    showToast('Failed to revoke access.', true);
-                }
-                return;
-            }
-            const result = await response.json();
-            updateInventoryVersion(result.newVersion);
-            fetchAccessSettings();
-            showToast('Access revoked successfully.');
         } catch (error) {
-            showToast(error.message, true);
+            showToast('An error occurred while revoking access.', true);
         }
     }
 
-    // --- EVENT LISTENERS ---
-    accessTabEl.addEventListener('show.bs.tab', fetchAccessSettings);
+    const autoCompleteJS = new autoComplete({
+        selector: "#userSearchInput",
+        placeHolder: "Search by username or email...",
+        data: {
+            src: async (query) => {
+                try {
+                    const source = await fetch(`/api/inventory/${inventoryId}/access/search-users?query=${encodeURIComponent(query)}`);
+                    if (!source.ok) return [];
+                    const data = await source.json();
+                    return data;
+                } catch (error) { return []; }
+            },
+            keys: ["userName", "email"],
+            cache: false
+        },
+        resultItem: {
+            highlight: true,
+            element: (item, data) => {
+                item.innerHTML = `
+                <span style="display: flex; justify-content: space-between;">
+                  <span>${data.match}</span>
+                  <small style="color: #999;">${data.key === 'userName' ? data.value.email : data.value.userName}</small>
+                </span>`;
+            },
+        },
+        threshold: 2,
+        debounce: 300,
+        events: {
+            input: {
+                selection: (event) => {
+                    const selection = event.detail.selection.value;
+                    autoCompleteJS.input.value = '';
+                    grantAccess(selection.id);
+                }
+            }
+        }
+    });
 
     isPublicSwitch.addEventListener('change', updatePublicAccess);
-
-    userSearchBtn.addEventListener('click', searchUsers);
-
-    userSearchInput.addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            searchUsers();
-        }
-    });
-
-    userSearchResults.addEventListener('click', e => {
-        e.preventDefault();
-        const target = e.target.closest('.list-group-item-action');
-        if (target && target.dataset.userId) {
-            grantAccess(target.dataset.userId);
-        }
-    });
-
-    grantedUsersList.addEventListener('change', e => {
-        if (e.target.classList.contains('permission-checkbox')) {
-            updateRevokeButtonState();
-        }
-    });
-
-    selectAllPermissionsCheckbox.addEventListener('change', e => {
-        grantedUsersList.querySelectorAll('.permission-checkbox').forEach(cb => {
-            cb.checked = e.target.checked;
-        });
-        updateRevokeButtonState();
-    });
-
     revokeSelectedBtn.addEventListener('click', revokeSelectedPermissions);
+
+    accessTabEl.addEventListener('show.bs.tab', () => {
+        fetchIsPublic();
+        if (!grantedUsersTable) {
+            initializeGrantedUsersTable();
+        }
+    }, { once: true });
 }

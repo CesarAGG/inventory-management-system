@@ -83,24 +83,21 @@ namespace InventoryManagementSystem.Areas.Identity.Pages.Account
                 // User does not exist or external login is not associated yet.
                 if (user == null)
                 {
-                    user = new ApplicationUser { UserName = email, Email = email, EmailConfirmed = true };
-                    var createUserResult = await _userManager.CreateAsync(user);
-                    if (!createUserResult.Succeeded)
-                    {
-                        ErrorMessage = createUserResult.Errors.First().Description;
-                        return RedirectToPage("./Login", new { ReturnUrl = returnUrl });
-                    }
+                    // This is a new user. Redirect them to the completion page
+                    // where they MUST choose a username.
+                    return RedirectToPage("./CompleteRegistration", new { ReturnUrl = returnUrl });
                 }
 
+                // This logic is for an existing user who is logging in with a new provider.
                 var addLoginResult = await _userManager.AddLoginAsync(user, info);
                 if (!addLoginResult.Succeeded)
                 {
-                    ErrorMessage = addLoginResult.Errors.First().Description;
+                    ErrorMessage = "Failed to associate external login.";
                     return RedirectToPage("./Login", new { ReturnUrl = returnUrl });
                 }
 
                 await _signInManager.SignInAsync(user, isPersistent: false, info.LoginProvider);
-                _logger.LogInformation("User account for {email} was created/linked and logged in with {provider}.", email, info.LoginProvider);
+                _logger.LogInformation("User account for {email} was linked and logged in with {provider}.", email, info.LoginProvider);
                 return LocalRedirect(returnUrl);
             }
         }

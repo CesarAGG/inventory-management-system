@@ -7,7 +7,9 @@ public class ItemDto
 {
     public string Id { get; set; } = string.Empty;
     public string CustomId { get; set; } = string.Empty;
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string? CustomIdSegmentBoundaries { get; set; }
+    public DateTime CreatedAt { get; set; }
     public Dictionary<string, object?> Fields { get; set; } = new();
-    public uint NewInventoryVersion { get; set; } // New property
+    public uint NewInventoryVersion { get; set; }
+    public uint NewItemVersion { get; set; }
 }

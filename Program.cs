@@ -7,7 +7,6 @@ using Npgsql;
 using System;
 using System.Threading.Tasks;
 using System.Text.Json.Serialization;
-using System.Text.Json;
 using InventoryManagementSystem.Services.InventoryServices;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,6 +18,8 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
     options.SignIn.RequireConfirmedAccount = false;
+    options.User.RequireUniqueEmail = true;
+    options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-";
 })
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultUI()

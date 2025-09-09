@@ -11,7 +11,9 @@ public class ColumnDefinition
 {
     public string FieldId { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
-    public string Data { get; set; } = string.Empty; // This is the key for the data object
-    public string Type { get; set; } = "string"; // Helps client-side rendering
+    public string? Description { get; set; }
+    public string Data { get; set; } = string.Empty;
+    public string Type { get; set; } = "string";
     public bool Orderable { get; set; } = true;
+    public bool IsVisibleInTable { get; set; } = true;
 }

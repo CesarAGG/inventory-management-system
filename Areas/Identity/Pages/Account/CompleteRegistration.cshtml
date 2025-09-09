@@ -1,0 +1,31 @@
+﻿@page
+@model InventoryManagementSystem.Areas.Identity.Pages.Account.CompleteRegistrationModel
+@{
+    ViewData["Title"] = "Complete Registration";
+}
+
+<h1>@ViewData["Title"]</h1>
+<h4 class="text-muted">Almost there! Your email is confirmed. Please choose a unique username to complete your account setup.</h4>
+<hr />
+<div class="row">
+    <div class="col-md-4">
+        <form method="post" asp-route-returnUrl="@Model.ReturnUrl">
+            <div asp-validation-summary="ModelOnly" class="text-danger" role="alert"></div>
+            <input asp-for="Input.Email" type="hidden" />
+            <div class="form-floating mb-3">
+                <input asp-for="Input.Email" class="form-control" disabled />
+                <label asp-for="Input.Email" class="form-label"></label>
+            </div>
+            <div class="form-floating mb-3">
+                <input asp-for="Input.UserName" class="form-control" placeholder="Choose a username" autofocus />
+                <label asp-for="Input.UserName" class="form-label"></label>
+                <span asp-validation-for="Input.UserName" class="text-danger"></span>
+            </div>
+            <button type="submit" class="w-100 btn btn-lg btn-primary">Register</button>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

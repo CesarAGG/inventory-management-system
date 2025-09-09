@@ -12,6 +12,7 @@ function initializeCustomIdTab(inventoryId, csrfToken) {
     const editSelectedSegmentBtn = document.getElementById('editSelectedSegmentBtn');
     const removeSelectedSegmentsBtn = document.getElementById('removeSelectedSegmentsBtn');
     const clearFormatBtn = document.getElementById('clearFormatBtn');
+    const segmentTrash = document.getElementById('segment-trash');
     let currentIdFormat = [];
     let datePreviewDebounceTimer;
     let originalSegmentForCancel = null;
@@ -258,22 +259,46 @@ function initializeCustomIdTab(inventoryId, csrfToken) {
         if (e.target.classList.contains('edit-segment-btn')) openEditSegmentModal(segmentId);
     });
 
-    new Sortable(availableSegmentsList, { group: { name: 'segments', pull: 'clone', put: false }, sort: false, animation: 150 });
+    new Sortable(availableSegmentsList, {
+        group: { name: 'segments', pull: 'clone', put: false },
+        sort: false,
+        animation: 150
+    });
 
     new Sortable(currentFormatList, {
-        group: 'segments', animation: 150,
+        group: 'segments',
+        animation: 150,
         onAdd: evt => {
+            // Prevent adding from the trash
+            if (evt.from.id === 'segment-trash') {
+                evt.item.remove();
+                return;
+            }
             const newSegment = createDefaultSegment(evt.item.dataset.segmentType);
-            evt.item.remove(); // Remove the placeholder clone immediately
+            evt.item.remove();
             if (newSegment) {
                 currentIdFormat.splice(evt.newIndex, 0, newSegment);
                 renderCurrentFormat();
-                openEditSegmentModal(newSegment.id); // Automatically open the edit modal
+                openEditSegmentModal(newSegment.id);
             }
         },
         onEnd: evt => {
-            const [movedItem] = currentIdFormat.splice(evt.oldIndex, 1);
-            currentIdFormat.splice(evt.newIndex, 0, movedItem);
+            // Handles reordering within the list
+            if (evt.to.id === 'current-format-list') {
+                const [movedItem] = currentIdFormat.splice(evt.oldIndex, 1);
+                currentIdFormat.splice(evt.newIndex, 0, movedItem);
+                renderCurrentFormat();
+            }
+        }
+    });
+
+    new Sortable(segmentTrash, {
+        group: 'segments',
+        animation: 150,
+        onAdd: evt => {
+            const segmentId = evt.item.dataset.id;
+            evt.item.remove(); // Remove the element from the trash UI
+            currentIdFormat = currentIdFormat.filter(s => s.id !== segmentId);
             renderCurrentFormat();
         }
     });

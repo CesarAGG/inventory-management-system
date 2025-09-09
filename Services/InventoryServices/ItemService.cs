@@ -11,7 +11,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using InventoryManagementSystem.Services;
-using System.Linq.Dynamic.Core;
+using InventoryManagementSystem.Models.CustomId;
 
 namespace InventoryManagementSystem.Services.InventoryServices;
 
@@ -32,6 +32,56 @@ public class ItemService : IItemService
 
     private string GetUserId(ClaimsPrincipal user) => user.FindFirstValue(ClaimTypes.NameIdentifier)!;
     private bool IsAdmin(ClaimsPrincipal user) => user.IsInRole("Admin");
+
+    private bool IsIdValid(string id, List<IdSegment> formatSegments, string? boundaries, Dictionary<string, string> validationErrors)
+    {
+        if (string.IsNullOrEmpty(boundaries))
+        {
+            validationErrors["customId"] = "ID structure (segment boundaries) is missing.";
+            return false;
+        }
+
+        var boundaryParts = boundaries.Split(',').Select(p => int.TryParse(p, out var val) ? val : -1).ToArray();
+        if (boundaryParts.Any(p => p == -1) || boundaryParts.Length != formatSegments.Count || boundaryParts.Sum() != id.Length)
+        {
+            validationErrors["customId"] = "ID structure is invalid or does not match the ID string's length.";
+            return false;
+        }
+
+        int currentIndex = 0;
+        for (int i = 0; i < formatSegments.Count; i++)
+        {
+            var segment = formatSegments[i];
+            var length = boundaryParts[i];
+            var idPart = id.Substring(currentIndex, length);
+
+            bool segmentValid = segment switch
+            {
+                FixedTextSegment s => s.Value == idPart,
+                DateSegment s => DateTime.TryParseExact(idPart, s.Format, CultureInfo.InvariantCulture, DateTimeStyles.None, out _),
+                SequenceSegment s => int.TryParse(idPart, out _) && idPart.Length >= s.Padding,
+                RandomNumbersSegment s => s.Format switch
+                {
+                    "20-bit" => long.TryParse(idPart, out var num) && num >= 0 && num < 1048576,
+                    "32-bit" => long.TryParse(idPart, out var num) && num >= 0 && num < 2147483648L,
+                    "6-digit" => idPart.Length == 6 && int.TryParse(idPart, out _),
+                    "9-digit" => idPart.Length == 9 && int.TryParse(idPart, out _),
+                    _ => false
+                },
+                GuidSegment s => Guid.TryParseExact(idPart, s.Format, out _),
+                _ => false
+            };
+
+            if (!segmentValid)
+            {
+                validationErrors["customId"] = $"The segment '{idPart}' is not valid for the type '{segment.Type}' with its format constraints.";
+                return false;
+            }
+            currentIndex += length;
+        }
+
+        return true;
+    }
 
     private void HydrateItemFromRequest(Item item, ItemApiRequest request, List<CustomField> fields, Dictionary<string, string> validationErrors)
     {
@@ -61,25 +111,63 @@ public class ItemService : IItemService
         }
     }
 
-    private void ApplyCustomId(Item item, Inventory inventory)
+    private void ApplyCustomId(Item item, Inventory inventory, ItemApiRequest request, Dictionary<string, string> validationErrors)
     {
         if (string.IsNullOrWhiteSpace(inventory.CustomIdFormat))
         {
+            if (!string.IsNullOrEmpty(request.CustomId))
+            {
+                validationErrors["customId"] = "A Custom ID is not allowed because no format is defined for this inventory.";
+            }
             item.CustomId = string.Empty;
             item.CustomIdFormatHashApplied = null;
+            item.CustomIdSegmentBoundaries = null;
             return;
         }
 
-        bool needsNewId = string.IsNullOrEmpty(item.CustomId) || item.CustomIdFormatHashApplied != inventory.CustomIdFormatHash;
-        if (needsNewId)
+        var segments = JsonIdSegmentDeserializer.Deserialize(inventory.CustomIdFormat);
+
+        if (string.IsNullOrEmpty(request.CustomId))
         {
-            var segments = JsonIdSegmentDeserializer.Deserialize(inventory.CustomIdFormat);
-            if (segments.Any())
-            {
-                item.CustomId = _customIdService.GenerateId(inventory, segments);
-                item.CustomIdFormatHashApplied = inventory.CustomIdFormatHash;
-            }
+            var result = _customIdService.GenerateId(inventory, segments);
+            item.CustomId = result.Id;
+            item.CustomIdSegmentBoundaries = result.Boundaries;
         }
+        else
+        {
+            if (!IsIdValid(request.CustomId, segments, request.CustomIdSegmentBoundaries, validationErrors))
+            {
+                return;
+            }
+            item.CustomId = request.CustomId;
+            item.CustomIdSegmentBoundaries = request.CustomIdSegmentBoundaries;
+        }
+        item.CustomIdFormatHashApplied = inventory.CustomIdFormatHash;
+    }
+
+    public async Task<ServiceResult<(string Id, string Boundaries)>> RegenerateIdAsync(string inventoryId, uint inventoryVersion, ClaimsPrincipal user)
+    {
+        var inventory = await _context.Inventories.AsNoTracking().FirstOrDefaultAsync(i => i.Id == inventoryId);
+        if (inventory == null) return ServiceResult<(string, string)>.FromError(ServiceErrorType.NotFound, "Inventory not found.");
+
+        if (inventory.Version != inventoryVersion)
+        {
+            return ServiceResult<(string, string)>.FromError(ServiceErrorType.Concurrency, "Inventory settings have changed. Please reload.");
+        }
+
+        if (!await _accessService.CanWrite(inventory, GetUserId(user), IsAdmin(user))) return ServiceResult<(string, string)>.FromError(ServiceErrorType.Forbidden, "Forbidden.");
+
+        if (string.IsNullOrWhiteSpace(inventory.CustomIdFormat))
+        {
+            return ServiceResult<(string, string)>.Success((string.Empty, string.Empty));
+        }
+
+        var segments = JsonIdSegmentDeserializer.Deserialize(inventory.CustomIdFormat);
+
+        var tempInventoryState = new Inventory { LastSequenceValue = inventory.LastSequenceValue };
+        var result = _customIdService.GenerateId(tempInventoryState, segments);
+
+        return ServiceResult<(string, string)>.Success(result);
     }
 
     public async Task<ServiceResult<InventorySchemaViewModel>> GetInventorySchemaAsync(string inventoryId)
@@ -91,7 +179,6 @@ public class ItemService : IItemService
         }
 
         var schema = new InventorySchemaViewModel();
-        // Use "system" as a special marker for non-field columns
         schema.Columns.Add(new ColumnDefinition { Title = "", Data = "id", Orderable = false, FieldId = "system_checkbox" });
         schema.Columns.Add(new ColumnDefinition { Title = "Item ID", Data = "customId", FieldId = "system_customId" });
         schema.Columns.Add(new ColumnDefinition { Title = "Created At", Data = "createdAt", FieldId = "system_createdAt" });
@@ -100,7 +187,7 @@ public class ItemService : IItemService
             .Where(cf => cf.InventoryId == inventoryId)
             .OrderBy(cf => cf.Order)
             .AsNoTracking()
-            .Select(f => new { f.Id, f.Name, f.TargetColumn, Type = f.Type.ToString() })
+            .Select(f => new { f.Id, f.Name, f.Description, f.TargetColumn, Type = f.Type.ToString(), f.IsVisibleInTable })
             .ToListAsync();
 
         foreach (var field in customFields)
@@ -109,8 +196,10 @@ public class ItemService : IItemService
             {
                 FieldId = field.Id,
                 Title = field.Name,
+                Description = field.Description,
                 Data = field.TargetColumn.ToLower(),
-                Type = field.Type
+                Type = field.Type,
+                IsVisibleInTable = field.IsVisibleInTable
             });
         }
 
@@ -196,9 +285,9 @@ public class ItemService : IItemService
             var validationErrors = new Dictionary<string, string>();
 
             HydrateItemFromRequest(newItem, request, fields, validationErrors);
+            ApplyCustomId(newItem, inventory, request, validationErrors);
             if (validationErrors.Any()) { return ServiceResult<ItemDto>.FromValidationErrors(validationErrors); }
 
-            ApplyCustomId(newItem, inventory);
             _context.Items.Add(newItem);
 
             try
@@ -213,18 +302,26 @@ public class ItemService : IItemService
                 {
                     Id = savedItem.Id,
                     CustomId = savedItem.CustomId,
+                    CustomIdSegmentBoundaries = savedItem.CustomIdSegmentBoundaries,
                     CreatedAt = savedItem.CreatedAt,
                     Fields = fields.ToDictionary(field => field.TargetColumn.ToLower(), field => typeof(Item).GetProperty(field.TargetColumn)?.GetValue(savedItem)),
-                    NewInventoryVersion = inventory.Version
+                    NewInventoryVersion = inventory.Version,
+                    NewItemVersion = savedItem.Version
                 };
                 return ServiceResult<ItemDto>.Success(createdItemDto);
             }
             catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
             {
-                _logger.LogWarning(ex, "Unique constraint violation on CustomId. Retry {RetryCount}/{MaxRetries}", i + 1, maxRetries);
+                await transaction.RollbackAsync();
+                if (pgEx.ConstraintName != null && pgEx.ConstraintName.Contains("IX_Items_InventoryId_CustomId"))
+                {
+                    var errors = new Dictionary<string, string> { { "customId", "This Custom ID is already in use in this inventory." } };
+                    return ServiceResult<ItemDto>.FromValidationErrors(errors);
+                }
+
+                _logger.LogWarning(ex, "Unique constraint violation on creating item. Retry {RetryCount}/{MaxRetries}", i + 1, maxRetries);
                 if (i == maxRetries - 1)
                 {
-                    await transaction.RollbackAsync();
                     return ServiceResult<ItemDto>.FromError(ServiceErrorType.General, "Failed to generate a unique item ID after multiple attempts.");
                 }
             }
@@ -247,15 +344,14 @@ public class ItemService : IItemService
             var validationErrors = new Dictionary<string, string>();
 
             HydrateItemFromRequest(itemToUpdate, request, fields, validationErrors);
+            ApplyCustomId(itemToUpdate, itemToUpdate.Inventory, request, validationErrors);
             if (validationErrors.Any()) { return ServiceResult<object>.FromValidationErrors(validationErrors); }
-
-            ApplyCustomId(itemToUpdate, itemToUpdate.Inventory);
 
             try
             {
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
-                return ServiceResult<object>.Success(new { message = "OK", newInventoryVersion = itemToUpdate.Inventory.Version });
+                return ServiceResult<object>.Success(new { message = "OK", newInventoryVersion = itemToUpdate.Inventory.Version, newItemVersion = itemToUpdate.Version });
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -264,11 +360,17 @@ public class ItemService : IItemService
             }
             catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
             {
-                _logger.LogWarning(ex, "Unique constraint violation on CustomId during UPDATE. Retry {RetryCount}/{MaxRetries}", i + 1, maxRetries);
+                await transaction.RollbackAsync();
+                if (pgEx.ConstraintName != null && pgEx.ConstraintName.Contains("IX_Items_InventoryId_CustomId"))
+                {
+                    var errors = new Dictionary<string, string> { { "customId", "This Custom ID is already in use in this inventory." } };
+                    return ServiceResult<object>.FromValidationErrors(errors);
+                }
+
+                _logger.LogWarning(ex, "Unique constraint violation on updating item. Retry {RetryCount}/{MaxRetries}", i + 1, maxRetries);
                 if (i == maxRetries - 1)
                 {
-                    await transaction.RollbackAsync();
-                    return ServiceResult<object>.FromError(ServiceErrorType.General, "Failed to generate a unique item ID after multiple attempts.");
+                    return ServiceResult<object>.FromError(ServiceErrorType.General, "Failed to update item due to a data conflict.");
                 }
             }
         }

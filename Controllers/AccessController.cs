@@ -6,8 +6,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Threading.Tasks;
 
@@ -47,6 +49,7 @@ public class AccessController : ControllerBase
             .Select(p => new UserPermissionDto
             {
                 UserId = p.UserId,
+                UserName = p.User!.UserName,
                 UserEmail = p.User!.Email ?? string.Empty
             })
             .ToListAsync();
@@ -103,23 +106,89 @@ public class AccessController : ControllerBase
 
         var ownerId = inventory.OwnerId;
 
-        IQueryable<ApplicationUser> userQuery = _userManager.Users;
+        var userQuery = _userManager.Users.AsQueryable();
+        var lowerQuery = query.ToLower();
+
         if (!IsAdmin())
         {
-            userQuery = userQuery.Where(u => u.Email != null && u.Email.ToLower() == query.ToLower());
+            userQuery = userQuery.Where(u =>
+                (u.Email != null && u.Email.ToLower() == lowerQuery) ||
+                (u.UserName != null && u.UserName.ToLower() == lowerQuery)
+            );
         }
         else
         {
-            userQuery = userQuery.Where(u => u.Email != null && EF.Functions.ILike(u.Email, $"{query}%"));
+            userQuery = userQuery.Where(u =>
+                (u.Email != null && EF.Functions.ILike(u.Email, $"{query}%")) ||
+                (u.UserName != null && EF.Functions.ILike(u.UserName, $"{query}%"))
+            );
         }
 
         var matchingUsers = await userQuery
             .Where(u => u.Id != ownerId && !usersWithPermission.Contains(u.Id))
-            .Select(u => new UserSearchDto { Id = u.Id, Email = u.Email! })
+            .Select(u => new UserSearchDto { Id = u.Id, Email = u.Email!, UserName = u.UserName! })
             .Take(10)
             .ToListAsync();
 
         return Ok(matchingUsers);
+    }
+
+    [HttpPost("granted-users")]
+    public async Task<IActionResult> GetGrantedUsers(string inventoryId, [FromForm] DataTablesRequest request)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId == null) return Unauthorized();
+
+        var inventory = await _context.Inventories.AsNoTracking().FirstOrDefaultAsync(i => i.Id == inventoryId);
+        if (inventory == null) return NotFound();
+        if (!_accessService.CanManageSettings(inventory, currentUserId, IsAdmin())) return Forbid();
+
+        var query = _context.InventoryUserPermissions
+            .Where(p => p.InventoryId == inventoryId)
+            .Select(p => p.User)
+            .Where(u => u != null)
+            .Select(u => u!);
+
+        var recordsTotal = await query.CountAsync();
+
+        if (request.Order.Any())
+        {
+            var order = request.Order.First();
+            var isDescending = order.Dir?.ToLower() == "desc";
+
+            Expression<Func<ApplicationUser, object>> sortColumnExpression = order.Column switch
+            {
+                2 => u => u.Email!,
+                _ => u => u.UserName!
+            };
+
+            query = isDescending
+                ? query.OrderByDescending(sortColumnExpression)
+                : query.OrderBy(sortColumnExpression);
+        }
+        else
+        {
+            query = query.OrderBy(u => u.UserName);
+        }
+
+        var pagedData = await query
+            .Skip(request.Start)
+            .Take(request.Length)
+            .Select(u => new UserPermissionDto
+            {
+                UserId = u.Id,
+                UserName = u.UserName,
+                UserEmail = u.Email
+            })
+            .ToListAsync();
+
+        return Ok(new DataTablesResponse<UserPermissionDto>
+        {
+            Draw = request.Draw,
+            RecordsTotal = recordsTotal,
+            RecordsFiltered = recordsTotal,
+            Data = pagedData
+        });
     }
 
     [HttpPost("grant")]
@@ -158,12 +227,10 @@ public class AccessController : ControllerBase
         };
 
         _context.InventoryUserPermissions.Add(newPermission);
-        // This pattern forces an update on the parent entity, which bumps the concurrency version token.
-        // It's a pragmatic way to signal that a related collection has changed without needing a version on the join table itself.
         inventory.Name = inventory.Name;
         await _context.SaveChangesAsync();
 
-        return Ok(new UserPermissionDto { UserId = user.Id, UserEmail = user.Email!, NewInventoryVersion = inventory.Version });
+        return Ok(new UserPermissionDto { UserId = user.Id, UserName = user.UserName, UserEmail = user.Email!, NewInventoryVersion = inventory.Version });
     }
 
     [HttpPost("revoke")]
@@ -194,7 +261,6 @@ public class AccessController : ControllerBase
         if (permissions.Any())
         {
             _context.InventoryUserPermissions.RemoveRange(permissions);
-            // This pattern forces an update on the parent entity, which bumps the concurrency version token.
             inventory.Name = inventory.Name;
             await _context.SaveChangesAsync();
         }

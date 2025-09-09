@@ -59,6 +59,8 @@ public class CustomFieldService : ICustomFieldService
         {
             InventoryId = inventoryId,
             Name = newField.Name,
+            Description = newField.Description,
+            IsVisibleInTable = newField.IsVisibleInTable,
             Type = fieldType,
             TargetColumn = targetColumn,
             Order = (existingFields.Max(f => (int?)f.Order) ?? -1) + 1
@@ -86,6 +88,8 @@ public class CustomFieldService : ICustomFieldService
         {
             Id = customField.Id,
             Name = customField.Name,
+            Description = customField.Description,
+            IsVisibleInTable = customField.IsVisibleInTable,
             Type = customField.Type.ToString(),
             DataKey = customField.TargetColumn,
             NewInventoryVersion = inventory.Version
@@ -106,6 +110,8 @@ public class CustomFieldService : ICustomFieldService
             {
                 Id = cf.Id,
                 Name = cf.Name,
+                Description = cf.Description,
+                IsVisibleInTable = cf.IsVisibleInTable,
                 Type = cf.Type.ToString(),
                 DataKey = cf.TargetColumn
             })
@@ -113,7 +119,7 @@ public class CustomFieldService : ICustomFieldService
         return ServiceResult<List<CustomFieldDto>>.Success(fields);
     }
 
-    public async Task<ServiceResult<object>> UpdateCustomFieldAsync(string fieldId, FieldNameUpdateRequest fieldUpdate, ClaimsPrincipal user)
+    public async Task<ServiceResult<object>> UpdateCustomFieldAsync(string fieldId, UpdateFieldRequest fieldUpdate, ClaimsPrincipal user)
     {
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
@@ -136,6 +142,8 @@ public class CustomFieldService : ICustomFieldService
             return ServiceResult<object>.FromError(ServiceErrorType.InvalidInput, "Field name cannot be empty.");
 
         fieldToUpdate.Name = fieldUpdate.Name;
+        fieldToUpdate.Description = fieldUpdate.Description;
+        fieldToUpdate.IsVisibleInTable = fieldUpdate.IsVisibleInTable;
 
         // This pattern forces an update on the parent entity, which bumps the concurrency version token.
         fieldToUpdate.Inventory.Name = fieldToUpdate.Inventory.Name;

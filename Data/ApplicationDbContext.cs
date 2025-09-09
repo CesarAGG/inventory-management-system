@@ -66,9 +66,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .Property(i => i.Version)
             .IsRowVersion();
 
-        builder.Entity<CustomField>()
-            .HasIndex(cf => new { cf.InventoryId, cf.TargetColumn })
-            .IsUnique();
+        builder.Entity<CustomField>(entity =>
+        {
+            entity.HasIndex(cf => new { cf.InventoryId, cf.TargetColumn }).IsUnique();
+            entity.Property(cf => cf.IsVisibleInTable).HasDefaultValue(true);
+        });
 
         // This filtered index enforces that CustomId must be unique within an inventory
         builder.Entity<Item>()
