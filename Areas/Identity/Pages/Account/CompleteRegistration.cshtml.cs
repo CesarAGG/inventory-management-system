@@ -24,11 +24,11 @@ namespace InventoryManagementSystem.Areas.Identity.Pages.Account
         }
 
         [BindProperty]
-        public CompleteRegistrationViewModel Input { get; set; }
+        public CompleteRegistrationViewModel Input { get; set; } = new();
 
-        public string ReturnUrl { get; set; }
+        public string? ReturnUrl { get; set; }
 
-        public async Task<IActionResult> OnGetAsync(string returnUrl = null)
+        public async Task<IActionResult> OnGetAsync(string? returnUrl = null)
         {
             ReturnUrl = returnUrl;
             var info = await _signInManager.GetExternalLoginInfoAsync();
@@ -38,6 +38,12 @@ namespace InventoryManagementSystem.Areas.Identity.Pages.Account
             }
 
             var email = info.Principal.FindFirstValue(ClaimTypes.Email);
+            if (email == null)
+            {
+                // Highly unlikely case, but handle it to satisfy null analysis
+                return RedirectToPage("./Login", new { ReturnUrl = returnUrl });
+            }
+
             var suggestedUserName = Regex.Replace(email.Split('@')[0], @"[^a-zA-Z0-9_.-]", "");
 
             Input = new CompleteRegistrationViewModel
@@ -48,13 +54,12 @@ namespace InventoryManagementSystem.Areas.Identity.Pages.Account
             return Page();
         }
 
-        public async Task<IActionResult> OnPostAsync(string returnUrl = null)
+        public async Task<IActionResult> OnPostAsync(string? returnUrl = null)
         {
             ReturnUrl = returnUrl ?? Url.Content("~/");
             var info = await _signInManager.GetExternalLoginInfoAsync();
             if (info == null)
             {
-                // If the external login info is lost, redirect to login
                 return RedirectToPage("./Login", new { ReturnUrl = returnUrl });
             }
 
@@ -79,8 +84,7 @@ namespace InventoryManagementSystem.Areas.Identity.Pages.Account
                 }
             }
 
-            // If we got this far, something failed, redisplay form
-            Input.Email = info.Principal.FindFirstValue(ClaimTypes.Email);
+            Input.Email = info.Principal.FindFirstValue(ClaimTypes.Email) ?? string.Empty;
             return Page();
         }
     }

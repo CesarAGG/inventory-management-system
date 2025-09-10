@@ -15,6 +15,8 @@ public class Item
 
     public string? CustomIdFormatHashApplied { get; set; }
 
+    public string? CustomIdSegmentBoundaries { get; set; }
+
     public uint Version { get; set; }
 
     public string? CustomString1 { get; set; }

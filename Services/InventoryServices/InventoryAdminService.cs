@@ -36,7 +36,11 @@ public class InventoryAdminService : IInventoryAdminService
     {
         var inventory = await _context.Inventories.AsNoTracking().FirstOrDefaultAsync(i => i.Id == inventoryId);
         if (inventory == null) return ServiceResult<IEnumerable<IdSegment>>.FromError(ServiceErrorType.NotFound, "Inventory not found.");
-        if (!_accessService.CanManageSettings(inventory, GetUserId(user), IsAdmin(user))) return ServiceResult<IEnumerable<IdSegment>>.FromError(ServiceErrorType.Forbidden, "User does not have permission to manage this inventory.");
+        
+        if (!await _accessService.CanWrite(inventory, GetUserId(user), IsAdmin(user)))
+        {
+            return ServiceResult<IEnumerable<IdSegment>>.FromError(ServiceErrorType.Forbidden, "User does not have permission to view the ID format for this inventory.");
+        }
 
         if (string.IsNullOrWhiteSpace(inventory.CustomIdFormat))
             return ServiceResult<IEnumerable<IdSegment>>.Success(new List<IdSegment>());
@@ -92,7 +96,7 @@ public class InventoryAdminService : IInventoryAdminService
             await transaction.RollbackAsync();
             return ServiceResult<object>.FromError(ServiceErrorType.Concurrency, "Data conflict: These settings were modified by another user. Please reload and try again.");
         }
-        return ServiceResult<object>.Success(new { message = "OK", newVersion = inventory.Version });
+        return ServiceResult<object>.Success(new { message = "OK", newVersion = inventory.Version, newHash = inventory.CustomIdFormatHash });
     }
 
     public async Task<ServiceResult<object>> RenameInventoryAsync(string inventoryId, RenameInventoryRequest request, ClaimsPrincipal user)

@@ -28,14 +28,15 @@ function initializeAccessTab(inventoryId, csrfToken) {
             processing: true,
             serverSide: true,
             ajax: {
-                url: `/api/inventory/${inventoryId}/granted-users`,
+                url: `/api/inventory/${inventoryId}/access/granted-users`,
                 type: 'POST',
+                contentType: 'application/json',
                 data: function (d) {
-                    d.__RequestVerificationToken = csrfToken;
+                    return JSON.stringify(d);
                 },
-                error: function () {
+                error: function (xhr) {
                     if ($.fn.DataTable.isDataTable('#grantedUsersTable')) {
-                        showToast("Could not load user list.", true);
+                        showToast(`Could not load user list. Status: ${xhr.status}`, true);
                     }
                 }
             },

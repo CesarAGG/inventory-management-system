@@ -2,6 +2,7 @@ using InventoryManagementSystem.Data;
 using InventoryManagementSystem.Services;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using System;
@@ -60,11 +61,24 @@ builder.Services.AddAuthentication()
     {
         options.ClientId = builder.Configuration["Google:ClientId"]!;
         options.ClientSecret = builder.Configuration["Google:ClientSecret"]!;
+        options.Events.OnRemoteFailure = context =>
+        {
+            // Handle user cancellation or other remote errors
+            context.Response.Redirect("/Identity/Account/Login?remoteError=Login was cancelled or failed at the external provider. Please try again.");
+            context.HandleResponse();
+            return Task.CompletedTask;
+        };
     })
     .AddMicrosoftAccount(options =>
     {
         options.ClientId = builder.Configuration["Microsoft:ClientId"]!;
         options.ClientSecret = builder.Configuration["Microsoft:ClientSecret"]!;
+        options.Events.OnRemoteFailure = context =>
+        {
+            context.Response.Redirect("/Identity/Account/Login?remoteError=Login was cancelled or failed at the external provider. Please try again.");
+            context.HandleResponse();
+            return Task.CompletedTask;
+        };
     });
 
 builder.Services.AddScoped<ICustomIdService, CustomIdService>();

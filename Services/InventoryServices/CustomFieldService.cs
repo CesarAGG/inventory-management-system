@@ -63,7 +63,7 @@ public class CustomFieldService : ICustomFieldService
             IsVisibleInTable = newField.IsVisibleInTable,
             Type = fieldType,
             TargetColumn = targetColumn,
-            Order = (existingFields.Max(f => (int?)f.Order) ?? -1) + 1
+            Order = (await _context.CustomFields.Where(cf => cf.InventoryId == inventoryId).MaxAsync(cf => (int?)cf.Order) ?? -1) + 1
         };
         _context.CustomFields.Add(customField);
 

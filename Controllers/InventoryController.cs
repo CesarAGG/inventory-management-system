@@ -187,13 +187,22 @@ public class InventoryController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> RegenerateId(string inventoryId, [FromBody] RegenerateIdRequest request)
     {
-        var result = await _itemService.RegenerateIdAsync(inventoryId, request.InventoryVersion, User);
+        var result = await _itemService.RegenerateIdAsync(inventoryId, request, User);
         if (!result.IsSuccess)
         {
             return HandleServiceResult(result);
         }
 
-        return Ok(new { id = result.Data.Id, boundaries = result.Data.Boundaries });
+        return Ok(new { id = result.Data.Id, boundaries = result.Data.Boundaries, newSequenceValue = result.Data.NewSequenceValue });
+    }
+
+    [HttpPost]
+    [Route("api/inventory/{inventoryId}/validate-id")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ValidateId(string inventoryId, [FromBody] ValidateIdRequest request)
+    {
+        var result = await _itemService.ValidateCustomIdAsync(inventoryId, request, User);
+        return HandleServiceResult(result);
     }
 
     [HttpPost]
