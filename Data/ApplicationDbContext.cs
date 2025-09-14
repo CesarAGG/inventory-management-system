@@ -9,7 +9,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Inventory> Inventories { get; set; }
     public DbSet<Item> Items { get; set; }
     public DbSet<CustomField> CustomFields { get; set; }
-    public DbSet<InventoryUserPermission> InventoryUserPermissions { get; set; } // Add this
+    public DbSet<InventoryUserPermission> InventoryUserPermissions { get; set; }
+    public DbSet<InventorySequence> InventorySequences { get; set; }
 
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
@@ -81,5 +82,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         // Configure composite key for InventoryUserPermission
         builder.Entity<InventoryUserPermission>()
             .HasKey(p => new { p.InventoryId, p.UserId });
+
+        // Configure composite key for InventorySequence
+        builder.Entity<InventorySequence>()
+            .HasKey(s => new { s.InventoryId, s.SegmentId });
     }
 }

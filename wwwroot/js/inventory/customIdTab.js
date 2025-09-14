@@ -62,8 +62,7 @@ function initializeCustomIdTab(inventoryId, csrfToken) {
         }
         let previewHtml = '';
         let formatsToFetch = [];
-        const sequenceSegment = currentIdFormat.find(s => s.type === 'Sequence');
-        const sequenceValue = sequenceSegment ? sequenceSegment.startValue : 0;
+
         currentIdFormat.forEach(segment => {
             const spanId = `preview-segment-${segment.id}`;
             switch (segment.type) {
@@ -71,7 +70,7 @@ function initializeCustomIdTab(inventoryId, csrfToken) {
                     previewHtml += `<span>${escapeHtml(segment.value)}</span>`;
                     break;
                 case 'Sequence':
-                    previewHtml += `<span>${escapeHtml(sequenceValue.toString().padStart(segment.padding, '0'))}</span>`;
+                    previewHtml += `<span>${escapeHtml(String(segment.startValue).padStart(segment.padding, '0'))}</span>`;
                     break;
                 case 'Date':
                     if (datePreviewCache.has(segment.format)) {

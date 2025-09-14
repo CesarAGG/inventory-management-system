@@ -1,10 +1,11 @@
 ﻿using InventoryManagementSystem.Models;
 using InventoryManagementSystem.Models.CustomId;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace InventoryManagementSystem.Services;
 
 public interface ICustomIdService
 {
-    (string Id, string Boundaries) GenerateId(Inventory inventory, List<IdSegment> segments);
+    Task<(string Id, string Boundaries, int newSequenceValue)> GenerateIdAsync(string inventoryId, List<IdSegment> segments, int? sequenceValueOverride = null);
 }

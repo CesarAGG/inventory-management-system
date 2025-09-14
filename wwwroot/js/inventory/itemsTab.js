@@ -493,9 +493,6 @@
                     body: JSON.stringify(payload)
                 });
 
-                const errorDiv = segmentationModalEl.querySelector('.modal-body .text-danger');
-                if (errorDiv) errorDiv.remove();
-
                 if (response.ok) {
                     currentItemState.customId = newCustomId;
                     currentItemState.boundaries = newBoundaries;
@@ -506,8 +503,7 @@
                 } else {
                     const errorResult = await response.json();
                     const msg = errorResult.message || 'Invalid ID structure.';
-                    const errorHtml = `<div class="text-danger mt-2">${escapeHtml(msg)}</div>`;
-                    segmentationEditorEl.insertAdjacentHTML('afterend', errorHtml);
+                    showToast(msg, true);
                 }
             } catch (e) {
                 showToast('An error occurred during validation.', true);

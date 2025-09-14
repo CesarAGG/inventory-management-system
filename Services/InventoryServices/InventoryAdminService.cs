@@ -78,7 +78,15 @@ public class InventoryAdminService : IInventoryAdminService
             {
                 inventory.CustomIdFormat = null;
                 inventory.CustomIdFormatHash = null;
-                inventory.LastSequenceValue = 0;
+
+                var sequencesToRemove = await _context.InventorySequences
+                    .Where(s => s.InventoryId == inventoryId)
+                    .ToListAsync();
+
+                if (sequencesToRemove.Any())
+                {
+                    _context.InventorySequences.RemoveRange(sequencesToRemove);
+                }
             }
         }
         catch (JsonException ex)

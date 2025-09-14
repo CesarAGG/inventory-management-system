@@ -70,10 +70,27 @@ public class ItemService : IItemService
                 SequenceSegment s => new Func<bool>(() =>
                 {
                     // Rule 1: Must be a valid number. Use long for robustness.
-                    if (!long.TryParse(idPart, out _))
+                    if (!long.TryParse(idPart, out var numericValue))
                     {
                         return false;
                     }
+
+                    // Rule 1a: The number must be greater than or equal to the start value.
+                    if (numericValue < s.StartValue)
+                    {
+                        return false;
+                    }
+
+                    // Rule 1b: The number must be a valid step in the sequence.
+                    if (s.Step <= 0) // Prevent division-by-zero or invalid steps
+                    {
+                        return numericValue == s.StartValue; // Only the start value is valid if step is non-positive
+                    }
+                    if ((numericValue - s.StartValue) % s.Step != 0)
+                    {
+                        return false;
+                    }
+
                     // Rule 2: Length must be at least the padding value.
                     if (idPart.Length < s.Padding)
                     {
@@ -111,7 +128,7 @@ public class ItemService : IItemService
         return true;
     }
 
-    private void ApplyCustomId(Item item, Inventory inventory, ItemApiRequest request, Dictionary<string, string> validationErrors)
+    private async Task ApplyCustomIdAsync(Item item, Inventory inventory, ItemApiRequest request, Dictionary<string, string> validationErrors)
     {
         if (string.IsNullOrWhiteSpace(inventory.CustomIdFormat))
         {
@@ -129,7 +146,7 @@ public class ItemService : IItemService
 
         if (string.IsNullOrEmpty(request.CustomId)) // ID Generation path
         {
-            var result = _customIdService.GenerateId(inventory, segments);
+            var result = await _customIdService.GenerateIdAsync(inventory.Id, segments);
             item.CustomId = result.Id;
             item.CustomIdSegmentBoundaries = result.Boundaries;
         }
@@ -158,17 +175,23 @@ public class ItemService : IItemService
                         string segmentValue = request.CustomId.Substring(currentIndex, length);
                         currentIndex += length;
 
-                        if (segment is SequenceSegment)
+                        if (segment is SequenceSegment seqSegment)
                         {
                             if (long.TryParse(segmentValue, out long userSequenceValue))
                             {
-                                if (userSequenceValue > inventory.LastSequenceValue)
+                                var sequenceTracker = await _context.InventorySequences
+                                    .FirstOrDefaultAsync(s => s.InventoryId == inventory.Id && s.SegmentId == seqSegment.Id);
+
+                                if (sequenceTracker == null)
                                 {
-                                    inventory.LastSequenceValue = (int)userSequenceValue;
+                                    sequenceTracker = new InventorySequence { InventoryId = inventory.Id, SegmentId = seqSegment.Id, LastValue = (int)userSequenceValue };
+                                    _context.InventorySequences.Add(sequenceTracker);
+                                }
+                                else if (userSequenceValue > sequenceTracker.LastValue)
+                                {
+                                    sequenceTracker.LastValue = (int)userSequenceValue;
                                 }
                             }
-                            // Pragmatically enforce the current "one sequence segment" limitation.
-                            break;
                         }
                     }
                 }
@@ -200,29 +223,31 @@ public class ItemService : IItemService
 
         // If the client provides a sequence value, it means we are re-randomizing an existing preview.
         // In this case, we use the provided value directly *without incrementing it* for the generation call.
-        if (request.LastKnownSequenceValue.HasValue)
+        if (sequenceSegment == null)
+        {
+            sequenceToUseForGeneration = 0; // No sequence to generate
+        }
+        else if (request.LastKnownSequenceValue.HasValue)
         {
             sequenceToUseForGeneration = request.LastKnownSequenceValue.Value;
         }
         else // This is the "zeroth click" call when the modal opens.
         {
-            int currentDbSequence = inventoryState.LastSequenceValue;
-            // Ensure the sequence starts correctly if it's below the defined start value.
-            if (sequenceSegment != null && currentDbSequence < sequenceSegment.StartValue)
-            {
-                currentDbSequence = sequenceSegment.StartValue - sequenceSegment.Step;
-            }
+            var sequenceTracker = await _context.InventorySequences
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.InventoryId == inventoryId && s.SegmentId == sequenceSegment.Id);
+
+            int currentDbSequence = sequenceTracker?.LastValue ?? (sequenceSegment.StartValue - sequenceSegment.Step);
+
             // Calculate the *next* sequence value.
-            sequenceToUseForGeneration = currentDbSequence + (sequenceSegment?.Step ?? 1);
+            sequenceToUseForGeneration = currentDbSequence + (sequenceSegment.Step);
         }
 
-        // The generation service expects the *base* value to increment from, so we subtract one step.
-        var tempInventoryForGeneration = new Inventory { LastSequenceValue = sequenceToUseForGeneration - (sequenceSegment?.Step ?? 1) };
-        var result = _customIdService.GenerateId(tempInventoryForGeneration, segments);
+        var result = await _customIdService.GenerateIdAsync(inventoryId, segments, sequenceToUseForGeneration);
 
         // Always return the sequence number that was *used* in this generation,
         // so the client can hold it for the next regeneration request.
-        return ServiceResult<(string, string, int)>.Success((result.Id, result.Boundaries, sequenceToUseForGeneration));
+        return ServiceResult<(string, string, int)>.Success((result.Id, result.Boundaries, result.newSequenceValue));
     }
 
     private void HydrateItemFromRequest(Item item, ItemApiRequest request, List<CustomField> fields, Dictionary<string, string> validationErrors)
@@ -392,7 +417,7 @@ public class ItemService : IItemService
             }
 
             HydrateItemFromRequest(newItem, request, fields, validationErrors);
-            ApplyCustomId(newItem, inventory, request, validationErrors);
+            await ApplyCustomIdAsync(newItem, inventory, request, validationErrors);
             if (validationErrors.Any()) { return ServiceResult<ItemDto>.FromValidationErrors(validationErrors); }
 
             itemEntry = _context.Items.Add(newItem);
@@ -446,7 +471,7 @@ public class ItemService : IItemService
         var validationErrors = new Dictionary<string, string>();
 
         HydrateItemFromRequest(itemToUpdate, request, fields, validationErrors);
-        ApplyCustomId(itemToUpdate, itemToUpdate.Inventory, request, validationErrors);
+        await ApplyCustomIdAsync(itemToUpdate, itemToUpdate.Inventory, request, validationErrors);
         if (validationErrors.Any()) { return ServiceResult<object>.FromValidationErrors(validationErrors); }
 
         _context.Entry(itemToUpdate.Inventory).State = EntityState.Modified; // Correctly mark inventory as modified
