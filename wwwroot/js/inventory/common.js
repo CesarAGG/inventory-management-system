@@ -1,9 +1,10 @@
 function showToast(message, isError = false) {
     const toastContainer = document.querySelector('.toast-container');
-    const toastId = 'toast-' + Math.random().toString(36).slice(2, 11);
+    const TOAST_ID_LENGTH = 9;
+    const toastId = 'toast-' + Math.random().toString(36).slice(2, 2 + TOAST_ID_LENGTH);
     const toastHtml = `
-                                            <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
-                                                <div class="toast-header ${isError ? 'bg-danger text-white' : 'bg-success text-white'}">
+                                                <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                                                    <div class="toast-header ${isError ? 'bg-danger text-white' : 'bg-success text-white'}">
                                                     <strong class="me-auto">${isError ? 'Error' : 'Success'}</strong>
                                                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
                                                 </div>

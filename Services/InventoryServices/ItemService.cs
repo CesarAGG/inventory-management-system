@@ -107,8 +107,8 @@ public class ItemService : IItemService
                 })(),
                 RandomNumbersSegment s => s.Format switch
                 {
-                    "20-bit" => long.TryParse(idPart, out var num) && num >= 0 && num < 1048576,
-                    "32-bit" => long.TryParse(idPart, out var num) && num >= 0 && num < 2147483648L,
+                    "20-bit" => long.TryParse(idPart, out var num) && num >= 0 && num < (1L << 20),
+                    "32-bit" => long.TryParse(idPart, out var num) && num >= 0 && num < (1L << 31),
                     "6-digit" => idPart.Length == 6 && int.TryParse(idPart, out _),
                     "9-digit" => idPart.Length == 9 && int.TryParse(idPart, out _),
                     _ => false

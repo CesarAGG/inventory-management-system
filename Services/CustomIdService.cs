@@ -73,10 +73,10 @@ public class CustomIdService : ICustomIdService
                     DateSegment ds => DateTime.UtcNow.ToString(ds.Format),
                     RandomNumbersSegment rns => rns.Format switch
                     {
-                        "20-bit" => Random.Shared.Next(0, 1048576).ToString(),
-                        "32-bit" => Random.Shared.NextInt64(0, 2147483648L).ToString(),
-                        "6-digit" => Random.Shared.Next(0, 1000000).ToString("D6"),
-                        _ => Random.Shared.Next(0, 1000000000).ToString("D9"),
+                        "20-bit" => Random.Shared.Next(0, 1 << 20).ToString(),
+                        "32-bit" => Random.Shared.NextInt64(0, 1L << 31).ToString(),
+                        "9-digit" => Random.Shared.Next(0, 1000000000).ToString("D9"),
+                        _ => Random.Shared.Next(0, 1000000).ToString("D6"), // Default to 6-digit
                     },
                     GuidSegment gs => Guid.NewGuid().ToString(gs.Format),
                     _ => string.Empty

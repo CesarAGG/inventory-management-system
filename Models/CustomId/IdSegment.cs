@@ -38,7 +38,7 @@ public class RandomNumbersSegment : IdSegment
 {
     public override string Type => "RandomNumbers";
     [JsonInclude]
-    public string Format { get; set; } = "9-digit";
+    public string Format { get; set; } = "6-digit";
 }
 
 

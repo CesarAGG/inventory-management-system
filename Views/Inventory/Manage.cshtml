@@ -406,10 +406,10 @@
     <script src="~/js/inventory/customIdTab.js" asp-append-version="true"></script>
     <script src="~/js/inventory/accessTab.js" asp-append-version="true"></script>
     <script src="~/js/inventory/settingsTab.js" asp-append-version="true"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@@tarekraafat/autocomplete.js@10.2.7/dist/autoComplete.min.js"></script>
+    <script src="~/lib/autocomplete.js/dist/autoComplete.min.js" asp-append-version="true"></script>
     <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const inventoryId = "@Model.Id";
+        document.addEventListener('DOMContentLoaded', function () {
+            const inventoryId = "@Model.Id";
         const inventoryName = @Json.Serialize(Model.Name);
         const csrfToken = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
         const currentUserId = "@(ViewData["CurrentUserId"] as string)";

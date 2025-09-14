@@ -55,15 +55,18 @@
     function initializeDataTable(columnsSchema) {
         const itemsTableEl = document.getElementById('itemsDataTable');
         const itemsTableHeadEl = document.getElementById('items-table-head');
+
         const headersHtml = `<tr>${columnsSchema.map(col => {
-            const fieldName = escapeHtml(col.title);
-            if (fieldName.length > 35) {
-                return `<th title="${fieldName}">${fieldName.substring(0, 32)}<span class="unselectable">...</span></th>`;
+            if (col.fieldId === 'system_checkbox') {
+                return `<th style="width: 50px;"><input class="form-check-input" type="checkbox" id="selectAllItemsCheckbox" /></th>`;
             }
-            return `<th>${fieldName}</th>`;
+            const fieldName = escapeHtml(col.title);
+            const thTitle = fieldName.length > 35 ? `title="${fieldName}"` : '';
+            const thContent = fieldName.length > 35 ? `${fieldName.substring(0, 32)}<span class="unselectable">...</span>` : fieldName;
+            return `<th ${thTitle}>${thContent}</th>`;
         }).join('')}</tr>`;
 
-        itemsTableHeadEl.innerHTML = headersHtml.replace('<th></th>', '<th style="width: 50px;"><input class="form-check-input" type="checkbox" id="selectAllItemsCheckbox" /></th>');
+        itemsTableHeadEl.innerHTML = headersHtml;
 
         itemsDataTable = new DataTable('#itemsDataTable', {
             processing: true,
@@ -75,14 +78,15 @@
                 error: function () { if ($.fn.DataTable.isDataTable('#itemsDataTable')) { showToast('An error occurred while loading item data.', true); } }
             },
             columns: columnsSchema.map(c => ({ "data": c.data })),
-            order: [[2, 'desc']],
+            order: [[2, 'desc']], // Order by 'createdAt'
             columnDefs: [
                 {
-                    targets: 0, orderable: false,
+                    targets: 0, // system_checkbox
+                    orderable: false,
                     render: (data, type, row) => `<input class="form-check-input item-checkbox" type="checkbox" value="${escapeHtml(row.id)}" />`
                 },
                 {
-                    targets: 1,
+                    targets: 1, // system_customId
                     render: (data, type, row) => {
                         const idToUse = row.customId || `System ID: ${row.id}`;
                         const displayId = row.customId
@@ -92,8 +96,11 @@
                         return `<div class="expandable-cell" data-field-name="Item ID" data-content="${escapeHtml(idToUse)}"><span class="truncated-text ${classes}" title="${escapeHtml(idToUse)}">${escapeHtml(displayId)}</span></div>`;
                     }
                 },
-                { targets: 2, render: (data) => new Date(data).toLocaleString() },
-                ...columnsSchema.slice(3).map((col, i) => ({
+                {
+                    targets: 2, // system_createdAt
+                    render: (data) => new Date(data).toLocaleString()
+                },
+                ...columnsSchema.slice(3).map((col, i) => ({ // Target only custom fields
                     targets: i + 3,
                     render: function (data) {
                         const stringValue = String(data ?? '');

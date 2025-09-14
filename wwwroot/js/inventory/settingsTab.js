@@ -2,6 +2,7 @@ function initializeSettingsTab(inventoryId, inventoryName, csrfToken, currentUse
     // --- RENAME LOGIC ---
     const renameInput = document.getElementById('renameInventoryInput');
     const renameBtn = document.getElementById('renameInventoryBtn');
+    const deleteConfirmLabel = document.getElementById('deleteConfirmLabel');
 
     async function renameInventory() {
         const newName = renameInput.value.trim();
