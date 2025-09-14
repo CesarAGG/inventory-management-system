@@ -4,7 +4,7 @@
     ViewData["Title"] = "Manage Inventory: " + Model.Name;
 }
 
-<h2>@ViewData["Title"]</h2>
+<h2 data-inventory-version="@Model.Version" data-inventory-format-hash="@(Model.CustomIdFormatHash ?? "")">@ViewData["Title"]</h2>
 
 <div>
     <a asp-action="Index" asp-controller="Home">Back to Home</a>
@@ -27,7 +27,7 @@
                 <button class="nav-link" id="access-tab" data-bs-toggle="tab" data-bs-target="#access-tab-pane" type="button" role="tab" aria-controls="access-tab-pane" aria-selected="false">Access</button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="admin-tab" data-bs-toggle="tab" data-bs-target="#admin-tab-pane" type="button" role="tab">Administration</button>
+                <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings-tab-pane" type="button" role="tab">General Settings</button>
             </li>
         </ul>
 
@@ -117,7 +117,7 @@
                     </div>
                     <div class="col-md-4">
                         <h5>Available Segments</h5>
-                        <p class="text-muted small">This is a palette of available components for your ID.</p>
+                        <p class="text-muted small">Drag a component to the format list on the left.</p>
                         <div id="available-segments-list" class="list-group">
                             <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-segment-type="FixedText">
                                 <div><i class="bi bi-fonts me-2"></i> Fixed Text <small class="text-muted d-block">e.g., "-"</small></div>
@@ -133,12 +133,16 @@
                             </div>
                             <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-segment-type="RandomNumbers">
                                 <div><i class="bi bi-dice-3 me-2"></i> Random Numbers <small class="text-muted d-block">e.g., "7341"</small></div>
-                                <i class="bi bi-question-circle-fill text-muted" data-bs-toggle="popover" data-bs-trigger="hover" title="Random Numbers" data-bs-content="Adds a set of random digits. The 'length' determines how many."></i>
+                                <i class="bi bi-question-circle-fill text-muted" data-bs-toggle="popover" data-bs-trigger="hover" title="Random Numbers" data-bs-content="Adds a set of random digits from the specified format."></i>
                             </div>
                             <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-segment-type="Guid">
                                 <div><i class="bi bi-hash me-2"></i> GUID <small class="text-muted d-block">A unique identifier</small></div>
                                 <i class="bi bi-question-circle-fill text-muted" data-bs-toggle="popover" data-bs-trigger="hover" title="GUID" data-bs-content="A Globally Unique Identifier. 'N': 32 digits. 'D': with hyphens. 'B': with braces {}. 'P': with parentheses ()."></i>
                             </div>
+                        </div>
+                        <div id="segment-trash" class="text-center text-muted border rounded mt-3 p-4" style="border-style: dashed !important;">
+                            <i class="bi bi-trash fs-2"></i>
+                            <div>Drag here to remove</div>
                         </div>
                     </div>
                 </div>
@@ -169,32 +173,28 @@
                             </div>
                             <div class="card-body">
                                 <div class="mb-3">
-                                    <label for="userSearchInput" class="form-label">Add user by exact email address</label>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control" id="userSearchInput" placeholder="user@example.com">
-                                        <button class="btn btn-outline-secondary" type="button" id="userSearchBtn">Search</button>
-                                    </div>
-                                    <div id="userSearchResults" class="list-group mt-1 position-absolute" style="z-index: 1000; width: calc(100% - 2rem);"></div>
+                                    <label for="userSearchInput" class="form-label">Add user by username or email</label>
+                                    <input type="text" class="form-control" id="userSearchInput" placeholder="Search for user...">
                                 </div>
                                 <hr />
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <h6>Users with Write Access:</h6>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="selectAllPermissionsCheckbox">
-                                        <label class="form-check-label" for="selectAllPermissionsCheckbox">Select All</label>
-                                    </div>
-                                </div>
-                                <ul id="grantedUsersList" class="list-group mt-2">
-                                    <!-- Users will be listed here -->
-                                </ul>
+                                <h6>Users with Write Access:</h6>
+                                <table id="grantedUsersTable" class="table table-sm table-hover" style="width:100%">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 50px;"><input class="form-check-input" type="checkbox" id="selectAllPermissionsCheckbox"></th>
+                                            <th>Username</th>
+                                            <th>Email</th>
+                                        </tr>
+                                    </thead>
+                                </table>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Administration Tab Pane -->
-            <div class="tab-pane fade" id="admin-tab-pane" role="tabpanel">
+            <!-- General Settings Tab Pane -->
+            <div class="tab-pane fade" id="settings-tab-pane" role="tabpanel">
                 <div class="row mt-3">
                     <!-- Rename Card -->
                     <div class="col-md-12 mb-4">
@@ -237,7 +237,7 @@
                             <div class="card-body">
                                 <p class="card-text">Once you delete an inventory, there is no going back. All items, custom fields, and access permissions associated with it will be permanently deleted.</p>
                                 <div class="form-group">
-                                    <label for="deleteConfirmInput" class="form-label">To confirm, type the name of the inventory: <strong class="text-danger">@Model.Name</strong></label>
+                                    <label for="deleteConfirmInput" id="deleteConfirmLabel" class="form-label">To confirm, type the name of the inventory: <strong class="text-danger">@Model.Name</strong></label>
                                     <input type="text" id="deleteConfirmInput" class="form-control mb-2" autocomplete="off">
                                     <button id="deleteInventoryBtn" class="btn btn-danger w-100" disabled>Delete this Inventory</button>
                                 </div>
@@ -275,15 +275,23 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Edit Field Name</h5>
+                <h5 class="modal-title">Edit Field</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form id="editFieldForm">
                 <div class="modal-body">
                     <input type="hidden" id="editFieldId" />
-                    <div class="form-group">
-                        <label for="editFieldNameInput" class="form-label">New Name</label>
+                    <div class="form-group mb-3">
+                        <label for="editFieldNameInput" class="form-label">Field Name</label>
                         <input type="text" class="form-control" id="editFieldNameInput" required>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="editFieldDescriptionInput" class="form-label">Description (optional)</label>
+                        <textarea class="form-control" id="editFieldDescriptionInput" rows="3" maxlength="250" placeholder="This will be shown as a hint in the item form."></textarea>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="editFieldIsVisibleInput">
+                        <label class="form-check-label" for="editFieldIsVisibleInput">Show in item table?</label>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -382,6 +390,11 @@
         .toast-container {
             z-index: 1100;
         }
+
+        #userSearchInput[aria-expanded="true"] {
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+        }
     </style>
 }
 
@@ -392,10 +405,11 @@
     <script src="~/js/inventory/fieldsTab.js" asp-append-version="true"></script>
     <script src="~/js/inventory/customIdTab.js" asp-append-version="true"></script>
     <script src="~/js/inventory/accessTab.js" asp-append-version="true"></script>
-    <script src="~/js/inventory/adminTab.js" asp-append-version="true"></script>
+    <script src="~/js/inventory/settingsTab.js" asp-append-version="true"></script>
+    <script src="~/lib/autocomplete.js/dist/autoComplete.min.js" asp-append-version="true"></script>
     <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const inventoryId = "@Model.Id";
+        document.addEventListener('DOMContentLoaded', function () {
+            const inventoryId = "@Model.Id";
         const inventoryName = @Json.Serialize(Model.Name);
         const csrfToken = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
         const currentUserId = "@(ViewData["CurrentUserId"] as string)";
@@ -408,8 +422,7 @@
             initializeFieldsTab(inventoryId, csrfToken);
             initializeCustomIdTab(inventoryId, csrfToken);
             initializeAccessTab(inventoryId, csrfToken);
-
-            initializeAdminTab(inventoryId, inventoryName, csrfToken, currentUserId, canManageSettings);
+            initializeSettingsTab(inventoryId, inventoryName, csrfToken, currentUserId, canManageSettings);
 
             initializePopovers();
         }

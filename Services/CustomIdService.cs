@@ -1,64 +1,92 @@
-﻿using InventoryManagementSystem.Models;
+﻿using InventoryManagementSystem.Data;
+using InventoryManagementSystem.Models;
 using InventoryManagementSystem.Models.CustomId;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
-using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace InventoryManagementSystem.Services;
 
-public interface ICustomIdService
-{
-    string GenerateId(Inventory inventory, List<IdSegment> segments);
-}
-
 public class CustomIdService : ICustomIdService
 {
-    public string GenerateId(Inventory inventory, List<IdSegment> segments)
-    {
-        var newIdBuilder = new StringBuilder();
-        int? sequenceValue = null;
+    private readonly ApplicationDbContext _context;
 
-        var sequenceSegment = segments.OfType<SequenceSegment>().FirstOrDefault();
-        if (sequenceSegment != null)
-        {
-            // If this is the first item, use the start value. Otherwise, increment.
-            if (inventory.LastSequenceValue < sequenceSegment.StartValue)
-            {
-                inventory.LastSequenceValue = sequenceSegment.StartValue;
-            }
-            else
-            {
-                inventory.LastSequenceValue += sequenceSegment.Step;
-            }
-            sequenceValue = inventory.LastSequenceValue;
-        }
+    public CustomIdService(ApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<(string Id, string Boundaries, int newSequenceValue)> GenerateIdAsync(string inventoryId, List<IdSegment> segments, int? sequenceValueOverride = null)
+    {
+        var idBuilder = new StringBuilder();
+        var boundaries = new List<int>();
+        int firstSequenceValue = 0;
+        bool firstSequenceSet = false;
 
         foreach (var segment in segments)
         {
-            switch (segment)
+            string part;
+            if (segment is SequenceSegment s)
             {
-                case FixedTextSegment s:
-                    newIdBuilder.Append(s.Value);
-                    break;
-                case SequenceSegment s:
-                    newIdBuilder.Append(sequenceValue?.ToString($"D{s.Padding}"));
-                    break;
-                case DateSegment s:
-                    newIdBuilder.Append(DateTime.UtcNow.ToString(s.Format));
-                    break;
-                case RandomNumbersSegment s:
-                    for (int i = 0; i < s.Length; i++)
+                int sequenceValue;
+                if (sequenceValueOverride.HasValue && !firstSequenceSet)
+                {
+                    sequenceValue = sequenceValueOverride.Value;
+                }
+                else
+                {
+                    var sequenceTracker = await _context.InventorySequences
+                        .FirstOrDefaultAsync(st => st.InventoryId == inventoryId && st.SegmentId == s.Id);
+
+                    if (sequenceTracker == null)
                     {
-                        newIdBuilder.Append(Random.Shared.Next(0, 10).ToString());
+                        sequenceTracker = new InventorySequence
+                        {
+                            InventoryId = inventoryId,
+                            SegmentId = s.Id,
+                            LastValue = s.StartValue
+                        };
+                        _context.InventorySequences.Add(sequenceTracker);
                     }
-                    break;
-                case GuidSegment s:
-                    newIdBuilder.Append(Guid.NewGuid().ToString(s.Format));
-                    break;
+                    else
+                    {
+                        sequenceTracker.LastValue += s.Step;
+                    }
+                    sequenceValue = sequenceTracker.LastValue;
+                }
+
+                if (!firstSequenceSet)
+                {
+                    firstSequenceValue = sequenceValue;
+                    firstSequenceSet = true;
+                }
+                part = sequenceValue.ToString($"D{s.Padding}");
             }
+            else
+            {
+                part = segment switch
+                {
+                    FixedTextSegment fts => fts.Value,
+                    DateSegment ds => DateTime.UtcNow.ToString(ds.Format),
+                    RandomNumbersSegment rns => rns.Format switch
+                    {
+                        "20-bit" => Random.Shared.Next(0, 1 << 20).ToString(),
+                        "32-bit" => Random.Shared.NextInt64(0, 1L << 31).ToString(),
+                        "9-digit" => Random.Shared.Next(0, 1000000000).ToString("D9"),
+                        _ => Random.Shared.Next(0, 1000000).ToString("D6"), // Default to 6-digit
+                    },
+                    GuidSegment gs => Guid.NewGuid().ToString(gs.Format),
+                    _ => string.Empty
+                };
+            }
+
+            idBuilder.Append(part);
+            boundaries.Add(part.Length);
         }
 
-        return newIdBuilder.ToString();
+        return (idBuilder.ToString(), string.Join(",", boundaries), firstSequenceValue);
     }
 }

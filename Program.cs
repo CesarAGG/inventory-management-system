@@ -2,12 +2,12 @@ using InventoryManagementSystem.Data;
 using InventoryManagementSystem.Services;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using System;
 using System.Threading.Tasks;
 using System.Text.Json.Serialization;
-using System.Text.Json;
 using InventoryManagementSystem.Services.InventoryServices;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,11 +19,37 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
     options.SignIn.RequireConfirmedAccount = false;
+    options.User.RequireUniqueEmail = true;
+    options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-";
 })
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultUI()
 .AddDefaultTokenProviders()
 .AddSignInManager<CustomSignInManager>();
+
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.Events.OnRedirectToLogin = context =>
+    {
+        if (context.Request.Path.StartsWithSegments("/api"))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        }
+        context.Response.Redirect(context.RedirectUri);
+        return Task.CompletedTask;
+    };
+    options.Events.OnRedirectToAccessDenied = context =>
+    {
+        if (context.Request.Path.StartsWithSegments("/api"))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        }
+        context.Response.Redirect(context.RedirectUri);
+        return Task.CompletedTask;
+    };
+});
 
 builder.Services.Configure<SecurityStampValidatorOptions>(options =>
 {
@@ -35,11 +61,24 @@ builder.Services.AddAuthentication()
     {
         options.ClientId = builder.Configuration["Google:ClientId"]!;
         options.ClientSecret = builder.Configuration["Google:ClientSecret"]!;
+        options.Events.OnRemoteFailure = context =>
+        {
+            // Handle user cancellation or other remote errors
+            context.Response.Redirect("/Identity/Account/Login?remoteError=Login was cancelled or failed at the external provider. Please try again.");
+            context.HandleResponse();
+            return Task.CompletedTask;
+        };
     })
     .AddMicrosoftAccount(options =>
     {
         options.ClientId = builder.Configuration["Microsoft:ClientId"]!;
         options.ClientSecret = builder.Configuration["Microsoft:ClientSecret"]!;
+        options.Events.OnRemoteFailure = context =>
+        {
+            context.Response.Redirect("/Identity/Account/Login?remoteError=Login was cancelled or failed at the external provider. Please try again.");
+            context.HandleResponse();
+            return Task.CompletedTask;
+        };
     });
 
 builder.Services.AddScoped<ICustomIdService, CustomIdService>();

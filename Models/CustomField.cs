@@ -15,6 +15,11 @@ public class CustomField
     [StringLength(100)]
     public string Name { get; set; } = string.Empty;
 
+    [StringLength(250)]
+    public string? Description { get; set; }
+
+    public bool IsVisibleInTable { get; set; } = true;
+
     [Required]
     public CustomFieldType Type { get; set; }
 

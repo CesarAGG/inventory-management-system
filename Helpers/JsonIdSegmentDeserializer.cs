@@ -52,7 +52,7 @@ public static class JsonIdSegmentDeserializer
         new() { Id = GetString(props, "id"), Format = GetString(props, "format") };
 
     private static RandomNumbersSegment MapRandomNumbers(Dictionary<string, JsonElement> props) =>
-        new() { Id = GetString(props, "id"), Length = GetInt(props, "length", 4) };
+        new() { Id = GetString(props, "id"), Format = GetString(props, "format") };
 
     private static SequenceSegment MapSequence(Dictionary<string, JsonElement> props) =>
         new() { Id = GetString(props, "id"), StartValue = GetInt(props, "startValue", 1), Step = GetInt(props, "step", 1), Padding = GetInt(props, "padding", 1) };

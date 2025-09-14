@@ -94,9 +94,18 @@ namespace InventoryManagementSystem.Data.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("text");
 
+                    b.Property<string>("Description")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
                     b.Property<string>("InventoryId")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("IsVisibleInTable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -139,9 +148,6 @@ namespace InventoryManagementSystem.Data.Migrations
                     b.Property<bool>("IsPublic")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("LastSequenceValue")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -151,11 +157,34 @@ namespace InventoryManagementSystem.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("OwnerId");
 
                     b.ToTable("Inventories");
+                });
+
+            modelBuilder.Entity("InventoryManagementSystem.Models.InventorySequence", b =>
+                {
+                    b.Property<string>("InventoryId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SegmentId")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
+                    b.Property<int>("LastValue")
+                        .HasColumnType("integer");
+
+                    b.HasKey("InventoryId", "SegmentId");
+
+                    b.ToTable("InventorySequences");
                 });
 
             modelBuilder.Entity("InventoryManagementSystem.Models.InventoryUserPermission", b =>
@@ -209,6 +238,9 @@ namespace InventoryManagementSystem.Data.Migrations
                     b.Property<string>("CustomIdFormatHashApplied")
                         .HasColumnType("text");
 
+                    b.Property<string>("CustomIdSegmentBoundaries")
+                        .HasColumnType("text");
+
                     b.Property<decimal?>("CustomNumeric1")
                         .HasColumnType("numeric");
 
@@ -239,6 +271,12 @@ namespace InventoryManagementSystem.Data.Migrations
                     b.Property<string>("InventoryId")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id");
 
@@ -403,6 +441,17 @@ namespace InventoryManagementSystem.Data.Migrations
                     b.Navigation("Owner");
                 });
 
+            modelBuilder.Entity("InventoryManagementSystem.Models.InventorySequence", b =>
+                {
+                    b.HasOne("InventoryManagementSystem.Models.Inventory", "Inventory")
+                        .WithMany("Sequences")
+                        .HasForeignKey("InventoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Inventory");
+                });
+
             modelBuilder.Entity("InventoryManagementSystem.Models.InventoryUserPermission", b =>
                 {
                     b.HasOne("InventoryManagementSystem.Models.Inventory", "Inventory")
@@ -496,6 +545,8 @@ namespace InventoryManagementSystem.Data.Migrations
                     b.Navigation("Items");
 
                     b.Navigation("Permissions");
+
+                    b.Navigation("Sequences");
                 });
 #pragma warning restore 612, 618
         }

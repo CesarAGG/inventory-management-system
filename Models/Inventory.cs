@@ -25,9 +25,9 @@ public class Inventory
 
     public string? CustomIdFormat { get; set; }
 
-    public int LastSequenceValue { get; set; } = 0;
-
     public string? CustomIdFormatHash { get; set; }
+
+    public uint Version { get; set; }
 
     [ForeignKey("OwnerId")]
     public virtual ApplicationUser? Owner { get; set; }
@@ -35,4 +35,5 @@ public class Inventory
     public virtual ICollection<Item> Items { get; set; } = new List<Item>();
     public virtual ICollection<CustomField> CustomFields { get; set; } = new List<CustomField>();
     public virtual ICollection<InventoryUserPermission> Permissions { get; set; } = new List<InventoryUserPermission>();
+    public virtual ICollection<InventorySequence> Sequences { get; set; } = new List<InventorySequence>();
 }

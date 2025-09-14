@@ -2,7 +2,7 @@
 @{
     ViewData["Title"] = "View Inventory: " + Model.Name;
 }
-<h2>@ViewData["Title"]</h2>
+<h2 data-inventory-version="@Model.Version" data-inventory-format-hash="@(Model.CustomIdFormatHash ?? "")">@ViewData["Title"]</h2>
 <div><a asp-action="Index" asp-controller="Home">Back to Home</a></div>
 <hr />
 <div class="row">
@@ -61,7 +61,8 @@
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const inventoryId = "@Model.Id";
-            const csrfToken = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+            const csrfTokenEl = document.querySelector('input[name="__RequestVerificationToken"]');
+            const csrfToken = csrfTokenEl ? csrfTokenEl.value : null;
 
             const canWrite = @(ViewData["CanWrite"] as bool? ?? false ? "true" : "false");
 

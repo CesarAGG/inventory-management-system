@@ -9,7 +9,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Inventory> Inventories { get; set; }
     public DbSet<Item> Items { get; set; }
     public DbSet<CustomField> CustomFields { get; set; }
-    public DbSet<InventoryUserPermission> InventoryUserPermissions { get; set; } // Add this
+    public DbSet<InventoryUserPermission> InventoryUserPermissions { get; set; }
+    public DbSet<InventorySequence> InventorySequences { get; set; }
 
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
@@ -56,9 +57,21 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .IsRequired()
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.Entity<CustomField>()
-            .HasIndex(cf => new { cf.InventoryId, cf.TargetColumn })
-            .IsUnique();
+        // Configure concurrency token for Inventory
+        builder.Entity<Inventory>()
+            .Property(i => i.Version)
+            .IsRowVersion();
+
+        // Configure concurrency token for Item
+        builder.Entity<Item>()
+            .Property(i => i.Version)
+            .IsRowVersion();
+
+        builder.Entity<CustomField>(entity =>
+        {
+            entity.HasIndex(cf => new { cf.InventoryId, cf.TargetColumn }).IsUnique();
+            entity.Property(cf => cf.IsVisibleInTable).HasDefaultValue(true);
+        });
 
         // This filtered index enforces that CustomId must be unique within an inventory
         builder.Entity<Item>()
@@ -69,5 +82,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         // Configure composite key for InventoryUserPermission
         builder.Entity<InventoryUserPermission>()
             .HasKey(p => new { p.InventoryId, p.UserId });
+
+        // Configure composite key for InventorySequence
+        builder.Entity<InventorySequence>()
+            .HasKey(s => new { s.InventoryId, s.SegmentId });
     }
 }

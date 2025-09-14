@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Linq;
 using System.Security.Claims;
 using Npgsql;
 
@@ -63,46 +64,43 @@ public class AdminController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteUsers(string[] selectedUserIds)
     {
+        if (selectedUserIds == null || !selectedUserIds.Any())
+        {
+            TempData["ErrorMessage"] = "No users were selected for deletion.";
+            return RedirectToAction(nameof(Index));
+        }
+
         var usersToDelete = await _userManager.Users
             .Where(u => selectedUserIds.Contains(u.Id))
             .ToListAsync();
 
-        var deletedCount = 0;
         foreach (var user in usersToDelete)
         {
             try
             {
                 var result = await _userManager.DeleteAsync(user);
-                if (result.Succeeded)
+                if (!result.Succeeded)
                 {
-                    deletedCount++;
-                }
-                else
-                {
-                    // Handle other potential Identity errors, e.g., concurrency failure
-                    TempData["ErrorMessage"] = $"Could not delete user {user.Email}. An unexpected error occurred.";
+                    var identityErrors = string.Join(", ", result.Errors.Select(e => e.Description));
+                    TempData["ErrorMessage"] = $"Could not delete user {user.Email}: {identityErrors}";
+                    return RedirectToAction(nameof(Index)); // Stop on first failure
                 }
             }
             catch (DbUpdateException ex)
             {
-                // Check if the inner exception is the specific PostgreSQL foreign key violation.
                 if (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23503")
                 {
-                    TempData["ErrorMessage"] = $"Cannot delete user {user.Email} because they own one or more inventories. Please transfer ownership of their inventories first.";
+                    TempData["ErrorMessage"] = $"Cannot delete user {user.Email}: they own one or more inventories. Please transfer ownership first.";
                 }
                 else
                 {
-                    // Handle other, unexpected database errors.
                     TempData["ErrorMessage"] = $"A database error occurred while trying to delete {user.Email}.";
                 }
+                return RedirectToAction(nameof(Index)); // Stop on first failure
             }
         }
 
-        if (deletedCount > 0)
-        {
-            TempData["SuccessMessage"] = $"{deletedCount} user(s) deleted successfully.";
-        }
-
+        TempData["SuccessMessage"] = $"{usersToDelete.Count} user(s) deleted successfully.";
         return RedirectToAction(nameof(Index));
     }
 

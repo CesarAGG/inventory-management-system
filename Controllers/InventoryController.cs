@@ -6,10 +6,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using InventoryManagementSystem.Services;
 using System.Text.Json;
 using InventoryManagementSystem.ViewModels;
 using InventoryManagementSystem.Services.InventoryServices;
+using InventoryManagementSystem.Services;
+using System.Collections.Generic;
 
 namespace InventoryManagementSystem.Controllers;
 
@@ -37,6 +38,29 @@ public class InventoryController : Controller
         _customFieldService = customFieldService;
         _itemService = itemService;
         _inventoryAdminService = inventoryAdminService;
+    }
+
+    private IActionResult HandleServiceResult<T>(ServiceResult<T> result)
+    {
+        switch (result.ErrorType)
+        {
+            case ServiceErrorType.None:
+                return Ok(result.Data);
+            case ServiceErrorType.NotFound:
+                return NotFound(new { message = result.ErrorMessage });
+            case ServiceErrorType.InvalidInput:
+                if (result.ValidationErrors != null)
+                {
+                    return BadRequest(result.ValidationErrors);
+                }
+                return BadRequest(new { message = result.ErrorMessage });
+            case ServiceErrorType.Forbidden:
+                return Forbid();
+            case ServiceErrorType.Concurrency:
+                return Conflict(new { message = result.ErrorMessage });
+            default:
+                return StatusCode(500, new { message = result.ErrorMessage ?? "An unexpected error occurred." });
+        }
     }
 
     [HttpGet]
@@ -74,58 +98,61 @@ public class InventoryController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AddCustomField(string inventoryId, [FromBody] CustomFieldDto newField)
     {
-        var (field, error) = await _customFieldService.AddCustomFieldAsync(inventoryId, newField, User);
-        if (error != null) return BadRequest(error);
-        return CreatedAtAction(nameof(GetCustomFields), new { inventoryId }, field);
+        var result = await _customFieldService.AddCustomFieldAsync(inventoryId, newField, User);
+        if (!result.IsSuccess)
+        {
+            return HandleServiceResult(result);
+        }
+        return CreatedAtAction(nameof(GetCustomFields), new { inventoryId }, result.Data);
     }
 
     [HttpGet]
     [Route("api/inventory/{inventoryId}/fields")]
     public async Task<IActionResult> GetCustomFields(string inventoryId)
     {
-        var (fields, error) = await _customFieldService.GetCustomFieldsAsync(inventoryId, User);
-        if (error != null) return StatusCode(403, error);
-        return Ok(fields);
+        var result = await _customFieldService.GetCustomFieldsAsync(inventoryId, User);
+        return HandleServiceResult(result);
     }
 
     [HttpPut]
     [Route("api/inventory/fields/{fieldId}")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> UpdateCustomField(string fieldId, [FromBody] CustomFieldDto fieldUpdate)
+    public async Task<IActionResult> UpdateCustomField(string fieldId, [FromBody] UpdateFieldRequest fieldUpdate)
     {
-        var error = await _customFieldService.UpdateCustomFieldAsync(fieldId, fieldUpdate, User);
-        if (error != null) return BadRequest(error);
-        return Ok();
+        var result = await _customFieldService.UpdateCustomFieldAsync(fieldId, fieldUpdate, User);
+        return HandleServiceResult(result);
     }
 
     [HttpPost]
     [Route("api/inventory/fields/delete")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteCustomFields([FromBody] string[] fieldIds)
+    public async Task<IActionResult> DeleteCustomFields([FromBody] FieldDeleteRequest deleteRequest)
     {
-        var error = await _customFieldService.DeleteCustomFieldsAsync(fieldIds, User);
-        if (error != null) return BadRequest(error);
-        return Ok();
+        var result = await _customFieldService.DeleteCustomFieldsAsync(deleteRequest, User);
+        return HandleServiceResult(result);
     }
 
     [HttpPut]
     [Route("api/inventory/{inventoryId}/fields/reorder")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ReorderCustomFields(string inventoryId, [FromBody] string[] orderedFieldIds)
+    public async Task<IActionResult> ReorderCustomFields(string inventoryId, [FromBody] FieldReorderRequest reorderRequest)
     {
-        var error = await _customFieldService.ReorderCustomFieldsAsync(inventoryId, orderedFieldIds, User);
-        if (error != null) return BadRequest(error);
-        return Ok();
+        var result = await _customFieldService.ReorderCustomFieldsAsync(inventoryId, reorderRequest, User);
+        return HandleServiceResult(result);
     }
 
     [HttpGet]
     [Route("api/inventory/{inventoryId}/id-format")]
     public async Task<IActionResult> GetIdFormat(string inventoryId)
     {
-        var (segments, error) = await _inventoryAdminService.GetIdFormatAsync(inventoryId, User);
-        if (error != null) return StatusCode(403, error); 
+        var result = await _inventoryAdminService.GetIdFormatAsync(inventoryId, User);
+        if (!result.IsSuccess)
+        {
+            return HandleServiceResult(result);
+        }
         var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-        return Content(JsonSerializer.Serialize((IEnumerable<object>)segments!, options), "application/json");
+        var jsonString = JsonSerializer.Serialize((IEnumerable<object>)result.Data!, options);
+        return Content(jsonString, "application/json");
     }
 
     [HttpPut]
@@ -133,19 +160,49 @@ public class InventoryController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveIdFormat(string inventoryId, [FromBody] JsonElement format)
     {
-        var error = await _inventoryAdminService.SaveIdFormatAsync(inventoryId, format, User);
-        if (error != null) return BadRequest(error);
-        return Ok();
+        var result = await _inventoryAdminService.SaveIdFormatAsync(inventoryId, format, User);
+        return HandleServiceResult(result);
     }
 
     [HttpGet]
     [AllowAnonymous]
-    [Route("api/inventory/{inventoryId}/items-data")]
-    public async Task<IActionResult> GetItemsData(string inventoryId)
+    [Route("api/inventory/{inventoryId}/schema")]
+    public async Task<IActionResult> GetInventorySchema(string inventoryId)
     {
-        var (data, error) = await _itemService.GetItemsDataAsync(inventoryId);
-        if (error != null) return NotFound(error);
-        return Ok(data);
+        var result = await _itemService.GetInventorySchemaAsync(inventoryId);
+        return HandleServiceResult(result);
+    }
+
+    [HttpPost]
+    [AllowAnonymous]
+    [Route("api/inventory/{inventoryId}/items-data")]
+    public async Task<IActionResult> LoadItemsForDataTable(string inventoryId, [FromForm] DataTablesRequest request)
+    {
+        var result = await _itemService.GetItemsForDataTableAsync(inventoryId, request);
+        return HandleServiceResult(result);
+    }
+
+    [HttpPost]
+    [Route("api/inventory/{inventoryId}/regenerate-id")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RegenerateId(string inventoryId, [FromBody] RegenerateIdRequest request)
+    {
+        var result = await _itemService.RegenerateIdAsync(inventoryId, request, User);
+        if (!result.IsSuccess)
+        {
+            return HandleServiceResult(result);
+        }
+
+        return Ok(new { id = result.Data.Id, boundaries = result.Data.Boundaries, newSequenceValue = result.Data.NewSequenceValue });
+    }
+
+    [HttpPost]
+    [Route("api/inventory/{inventoryId}/validate-id")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ValidateId(string inventoryId, [FromBody] ValidateIdRequest request)
+    {
+        var result = await _itemService.ValidateCustomIdAsync(inventoryId, request, User);
+        return HandleServiceResult(result);
     }
 
     [HttpPost]
@@ -153,9 +210,12 @@ public class InventoryController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateItem(string inventoryId, [FromBody] ItemApiRequest request)
     {
-        var (item, error) = await _itemService.CreateItemAsync(inventoryId, request, User);
-        if (error != null) return BadRequest(error);
-        return CreatedAtAction(nameof(GetItemsData), new { inventoryId }, item);
+        var result = await _itemService.CreateItemAsync(inventoryId, request, User);
+        if (!result.IsSuccess)
+        {
+            return HandleServiceResult(result);
+        }
+        return Ok(result.Data);
     }
 
     [HttpPost]
@@ -163,16 +223,8 @@ public class InventoryController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateItem(string itemId, [FromBody] ItemApiRequest request)
     {
-        var (updatedItem, error) = await _itemService.UpdateItemAsync(itemId, request, User);
-        if (error != null)
-        {
-            if (error is Dictionary<string, string> validationErrors)
-            {
-                return BadRequest(validationErrors);
-            }
-            return BadRequest(error);
-        }
-        return Ok(updatedItem);
+        var result = await _itemService.UpdateItemAsync(itemId, request, User);
+        return HandleServiceResult(result);
     }
 
     [HttpPost]
@@ -180,9 +232,8 @@ public class InventoryController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteItems([FromBody] string[] itemIds)
     {
-        var error = await _itemService.DeleteItemsAsync(itemIds, User);
-        if (error != null) return BadRequest(error);
-        return Ok();
+        var result = await _itemService.DeleteItemsAsync(itemIds, User);
+        return HandleServiceResult(result);
     }
 
     [HttpPut]
@@ -191,9 +242,8 @@ public class InventoryController : Controller
     public async Task<IActionResult> RenameInventory(string inventoryId, [FromBody] RenameInventoryRequest request)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
-        var (newName, error) = await _inventoryAdminService.RenameInventoryAsync(inventoryId, request, User);
-        if (error != null) return BadRequest(error);
-        return Ok(new { newName });
+        var result = await _inventoryAdminService.RenameInventoryAsync(inventoryId, request, User);
+        return HandleServiceResult(result);
     }
 
     [HttpPost]
@@ -202,9 +252,14 @@ public class InventoryController : Controller
     public async Task<IActionResult> TransferOwnership(string inventoryId, [FromBody] TransferOwnershipRequest request)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
-        var (message, shouldRedirect, error) = await _inventoryAdminService.TransferOwnershipAsync(inventoryId, request, User);
-        if (error != null) return BadRequest(error);
-        return Ok(new { message, shouldRedirect });
+        var result = await _inventoryAdminService.TransferOwnershipAsync(inventoryId, request, User);
+        if (!result.IsSuccess)
+        {
+            return HandleServiceResult(result);
+        }
+
+        var redirectUrl = result.Data!.ShouldRedirect ? Url.Action("Index", "User") : null;
+        return Ok(new { message = result.Data.Message, redirectUrl, newVersion = result.Data.NewInventoryVersion });
     }
 
     [HttpDelete]
@@ -212,9 +267,8 @@ public class InventoryController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteInventory(string inventoryId)
     {
-        var error = await _inventoryAdminService.DeleteInventoryAsync(inventoryId, User);
-        if (error != null) return BadRequest(error);
-        return Ok(new { message = "Inventory and all its data have been permanently deleted." });
+        var result = await _inventoryAdminService.DeleteInventoryAsync(inventoryId, User);
+        return HandleServiceResult(result);
     }
 
     [AllowAnonymous]
@@ -225,9 +279,10 @@ public class InventoryController : Controller
         if (inventory == null) return NotFound();
 
         var currentUserId = _userManager.GetUserId(User);
-        bool isOwnerOrAdmin = !string.IsNullOrEmpty(currentUserId) && _accessService.CanManageSettings(inventory, currentUserId, User.IsInRole("Admin"));
+        bool isAdmin = User.IsInRole("Admin");
+        bool canManageSettings = !string.IsNullOrEmpty(currentUserId) && _accessService.CanManageSettings(inventory, currentUserId, isAdmin);
 
-        if (isOwnerOrAdmin)
+        if (canManageSettings)
         {
             ViewData["CanManageSettings"] = true;
             ViewData["CanWrite"] = true;
@@ -236,8 +291,10 @@ public class InventoryController : Controller
         }
         else
         {
-            bool canWrite = !string.IsNullOrEmpty(currentUserId) && await _accessService.CanWrite(inventory, currentUserId, User.IsInRole("Admin"));
-            ViewData["CanWrite"] = canWrite;
+            bool canWriteItems = !string.IsNullOrEmpty(currentUserId) && await _accessService.CanWrite(inventory, currentUserId, isAdmin);
+            ViewData["CanManageSettings"] = false;
+            ViewData["CanWrite"] = canWriteItems;
+            ViewData["CurrentUserId"] = currentUserId;
             return View("View", inventory);
         }
     }

@@ -21,30 +21,85 @@
         </div>
         <div class="card-body">
             <div class="row justify-content-center">
-                <div class="col-auto table-responsive">
+                <div id="itemsDataTableContainer" class="col-auto table-responsive">
                     <table class="table table-hover mb-0" id="itemsDataTable">
                         <thead id="items-table-head"></thead>
-                        <tbody id="items-table-body"></tbody>
+                        <tbody></tbody>
                     </table>
                 </div>
             </div>
         </div>
-        <!-- ... -->
     </div>
 </form>
 
 @if (canWrite)
 {
-    <!-- Modals for CUD operations are only rendered if user has write access -->
+    <!-- Modals for CUD operations -->
 <div class="modal fade" id="itemModal" tabindex="-1">
-    <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h1 class="modal-title fs-5" id="itemModalLabel">Add New Item</h1><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="itemForm"><input type="hidden" id="itemId" /><div class="modal-body"></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button><button type="submit" class="btn btn-primary">Save</button></div></form></div></div>
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="itemModalLabel">Add New Item</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="itemForm">
+                <div class="modal-body"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 <div class="modal fade" id="deleteItemsConfirmModal" tabindex="-1">
-    <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h1 class="modal-title fs-5">Confirm Deletion</h1><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">Are you sure you want to delete the selected items? This cannot be undone.</div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-danger" id="confirmDeleteItemsBtn">Delete</button></div></div></div>
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5">Confirm Deletion</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">Are you sure you want to delete the selected items? This cannot be undone.</div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteItemsBtn">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+ <!-- Segmentation Modal -->
+<div class="modal fade" id="segmentationModal" tabindex="-1" aria-labelledby="segmentationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="segmentationModalLabel">Edit Custom ID</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Manually edit the text content of each segment. The final ID will be validated against the inventory's format rules before being applied.</p>
+                <hr />
+                <div id="segmentationEditor" class="d-flex flex-column gap-2"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmSegmentationBtn">Validate and Apply</button>
+            </div>
+        </div>
+    </div>
 </div>
 }
 
 <!-- This modal is for viewing content and is always available -->
 <div class="modal fade" id="viewContentModal" tabindex="-1">
-    <div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h1 class="modal-title fs-5" id="viewContentModalLabel">Field Content</h1><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><pre id="viewContentModalBody" style="white-space: pre-wrap; word-wrap: break-word;"></pre></div></div></div>
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="viewContentModalLabel">Field Content</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre id="viewContentModalBody" style="white-space: pre-wrap; word-wrap: break-word;"></pre>
+            </div>
+        </div>
+    </div>
 </div>

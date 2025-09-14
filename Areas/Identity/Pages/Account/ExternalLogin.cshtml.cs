@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Logging;
 using System.Security.Claims;
-using System.Security.Policy;
 using System.Threading.Tasks;
 
 namespace InventoryManagementSystem.Areas.Identity.Pages.Account
@@ -30,7 +29,6 @@ namespace InventoryManagementSystem.Areas.Identity.Pages.Account
         [TempData]
         public string? ErrorMessage { get; set; }
 
-        // This handler is called by the provider button on the Login page
         public IActionResult OnPost(string provider, string? returnUrl = null)
         {
             var redirectUrl = Url.Page("./ExternalLogin", pageHandler: "Callback", values: new { returnUrl });
@@ -38,15 +36,16 @@ namespace InventoryManagementSystem.Areas.Identity.Pages.Account
             return new ChallengeResult(provider, properties);
         }
 
-        // This handler is called when the user returns from the external provider
         public async Task<IActionResult> OnGetCallbackAsync(string? returnUrl = null, string? remoteError = null)
         {
             returnUrl = returnUrl ?? Url.Content("~/");
             if (remoteError != null)
             {
-                ErrorMessage = $"Error from external provider: {remoteError}";
+                ErrorMessage = remoteError;
+                _logger.LogWarning("External provider error: {RemoteError}", remoteError);
                 return RedirectToPage("./Login", new { ReturnUrl = returnUrl });
             }
+
             var info = await _signInManager.GetExternalLoginInfoAsync();
             if (info == null)
             {
@@ -65,7 +64,7 @@ namespace InventoryManagementSystem.Areas.Identity.Pages.Account
             if (user != null && user.IsBlocked)
             {
                 _logger.LogWarning("Blocked user {email} attempted external login.", email);
-                return RedirectToPage("./Lockout");
+                return RedirectToPage("./Login", new { ErrorMessage = "Invalid login attempt." });
             }
 
             var result = await _signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, isPersistent: false, bypassTwoFactor: true);
@@ -76,31 +75,24 @@ namespace InventoryManagementSystem.Areas.Identity.Pages.Account
             }
             if (result.IsLockedOut)
             {
-                return RedirectToPage("./Lockout");
+                return RedirectToPage("./Login", new { ErrorMessage = "Invalid login attempt." });
             }
             else
             {
-                // User does not exist or external login is not associated yet.
                 if (user == null)
                 {
-                    user = new ApplicationUser { UserName = email, Email = email, EmailConfirmed = true };
-                    var createUserResult = await _userManager.CreateAsync(user);
-                    if (!createUserResult.Succeeded)
-                    {
-                        ErrorMessage = createUserResult.Errors.First().Description;
-                        return RedirectToPage("./Login", new { ReturnUrl = returnUrl });
-                    }
+                    return RedirectToPage("./CompleteRegistration", new { ReturnUrl = returnUrl });
                 }
 
                 var addLoginResult = await _userManager.AddLoginAsync(user, info);
                 if (!addLoginResult.Succeeded)
                 {
-                    ErrorMessage = addLoginResult.Errors.First().Description;
+                    ErrorMessage = "Failed to associate external login.";
                     return RedirectToPage("./Login", new { ReturnUrl = returnUrl });
                 }
 
                 await _signInManager.SignInAsync(user, isPersistent: false, info.LoginProvider);
-                _logger.LogInformation("User account for {email} was created/linked and logged in with {provider}.", email, info.LoginProvider);
+                _logger.LogInformation("User account for {email} was linked and logged in with {provider}.", email, info.LoginProvider);
                 return LocalRedirect(returnUrl);
             }
         }
