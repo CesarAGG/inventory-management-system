@@ -34,3 +34,26 @@ function updateInventoryVersion(newVersion) {
         }
     }
 }
+
+function initializeDataTable(selector, options) {
+    const commonOptions = {
+        "processing": true,
+        "serverSide": true,
+        "ajax": {
+            "type": "POST",
+            "dataType": "json",
+            "error": function (xhr, error, thrown) {
+                // Check if the table still exists before showing a toast
+                if ($.fn.DataTable.isDataTable(selector)) {
+                    showToast('An error occurred while loading data. Please try again.', true);
+                }
+            }
+        }
+    };
+
+    // Deep merge of options, with user options taking precedence.
+    // This allows overriding parts of the ajax config, like the url.
+    const finalOptions = $.extend(true, {}, commonOptions, options);
+
+    return $(selector).DataTable(finalOptions);
+}

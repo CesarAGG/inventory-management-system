@@ -56,7 +56,7 @@ namespace InventoryManagementSystem.Areas.Identity.Pages.Account
         public class InputModel
         {
             [Required]
-            [StringLength(50, MinimumLength = 3, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.")]
+            [StringLength(50, ErrorMessage = "The {0} must be at max {1} characters long.")]
             [Display(Name = "Username")]
             public string UserName { get; set; }
 

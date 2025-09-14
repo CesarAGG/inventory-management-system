@@ -52,22 +52,8 @@
     <script src="~/js/inventory/common.js" asp-append-version="true"></script>
     <script>
         $(document).ready(function () {
-            const commonDataTablesOptions = {
-                "processing": true,
-                "serverSide": true,
+            initializeDataTable('#ownedInventoriesTable', {
                 "ajax": {
-                    "type": "POST",
-                    "dataType": "json",
-                    "error": function (xhr, error, thrown) {
-                        showToast('An error occurred while loading data. Please try again.', true);
-                    }
-                }
-            };
-
-            $('#ownedInventoriesTable').DataTable({
-                ...commonDataTablesOptions,
-                "ajax": {
-                    ...commonDataTablesOptions.ajax,
                     "url": "@Url.Action("LoadOwnedInventories", "User")"
                 },
                 "columns": [
@@ -85,10 +71,8 @@
                 "order": [[1, "desc"]]
             });
 
-            $('#sharedInventoriesTable').DataTable({
-                ...commonDataTablesOptions,
+            initializeDataTable('#sharedInventoriesTable', {
                 "ajax": {
-                    ...commonDataTablesOptions.ajax,
                     "url": "@Url.Action("LoadSharedInventories", "User")"
                 },
                 "columns": [
