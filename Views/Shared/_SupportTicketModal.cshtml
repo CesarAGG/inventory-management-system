@@ -1,0 +1,46 @@
+﻿@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Antiforgery
+
+@{
+    var token = Antiforgery.GetAndStoreTokens(Context).RequestToken;
+}
+
+<div class="modal fade" id="supportTicketModal" tabindex="-1" aria-labelledby="supportTicketModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="supportTicketModalLabel">Create Support Ticket</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="supportTicketForm">
+                @if (token != null)
+                {
+                <input type="hidden" name="__RequestVerificationToken" value="@token" />
+                }
+                <input type="hidden" id="ticketSourceUrl" name="SourceUrl" />
+                <input type="hidden" id="ticketInventoryId" name="InventoryId" />
+
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="ticketSummary" class="form-label">Summary</label>
+                        <textarea class="form-control" id="ticketSummary" name="Summary" rows="4" required maxlength="500" placeholder="Please describe the issue or your question."></textarea>
+                        <div class="invalid-feedback">A summary is required.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ticketPriority" class="form-label">Priority</label>
+                        <select class="form-select" id="ticketPriority" name="Priority" required>
+                            <option value="Average" selected>Average</option>
+                            <option value="Low">Low</option>
+                            <option value="High">High</option>
+                        </select>
+                    </div>
+                    <div id="ticket-validation-error" class="text-danger small mt-1 d-none"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Ticket</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

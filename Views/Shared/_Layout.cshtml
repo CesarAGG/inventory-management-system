@@ -64,6 +64,8 @@
         </div>
     </div>
 
+    <partial name="_SupportTicketModal" />
+
     <footer class="border-top footer text-muted">
         <div class="container">
             &copy; 2025 - InventoryManagementSystem - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
@@ -79,9 +81,11 @@
     <script src="https://cdn.datatables.net/2.0.8/js/dataTables.js"></script>
     <script src="https://cdn.datatables.net/2.0.8/js/dataTables.bootstrap5.js"></script>
     <script src="~/js/inventory/concurrencyHandler.js" asp-append-version="true"></script>
+    <script src="~/js/support.js" asp-append-version="true"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             initializeConcurrencyHandler();
+            initializeSupportTicket();
         });
     </script>
     @await RenderSectionAsync("Scripts", required: false)
