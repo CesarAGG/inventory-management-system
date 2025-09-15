@@ -83,6 +83,7 @@ builder.Services.AddAuthentication()
 
 builder.Services.AddScoped<ICustomIdService, CustomIdService>();
 builder.Services.AddScoped<IInventoryAccessService, InventoryAccessService>();
+builder.Services.AddScoped<ICloudStorageService, CloudStorageService>();
 
 builder.Services.AddScoped<ICustomFieldService, CustomFieldService>();
 builder.Services.AddScoped<IItemService, ItemService>();
