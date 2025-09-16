@@ -1,11 +1,4 @@
-﻿@using Microsoft.AspNetCore.Antiforgery
-@inject IAntiforgery Antiforgery
-
-@{
-    var token = Antiforgery.GetAndStoreTokens(Context).RequestToken;
-}
-
-<div class="modal fade" id="supportTicketModal" tabindex="-1" aria-labelledby="supportTicketModalLabel" aria-hidden="true">
+﻿<div class="modal fade" id="supportTicketModal" tabindex="-1" aria-labelledby="supportTicketModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
@@ -13,10 +6,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form id="supportTicketForm">
-                @if (token != null)
-                {
-                <input type="hidden" name="__RequestVerificationToken" value="@token" />
-                }
+                @Html.AntiForgeryToken()
                 <input type="hidden" id="ticketSourceUrl" name="SourceUrl" />
                 <input type="hidden" id="ticketInventoryId" name="InventoryId" />
 

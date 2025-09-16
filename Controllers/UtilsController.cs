@@ -7,13 +7,14 @@ using InventoryManagementSystem.Services;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace InventoryManagementSystem.Controllers;
 
 [ApiController]
 public class UtilsController : ControllerBase
 {
-    private readonly ICloudStorageService _cloudStorageService;
+    private readonly ICloudStorageService? _cloudStorageService;
 
     // A parameterless constructor for when the service is not needed
     public UtilsController() { }

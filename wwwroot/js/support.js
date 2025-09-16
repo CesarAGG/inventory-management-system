@@ -19,15 +19,9 @@ function initializeSupportTicket() {
         // Populate hidden fields with current context
         sourceUrlInput.value = window.location.href;
 
-        const inventoryHeader = document.querySelector('h2[data-inventory-version]');
-        if (inventoryHeader && inventoryHeader.closest('.tab-content')) {
-            // A bit of a trick: find the associated inventory ID from the Manage/View page structure
-            const inventoryId = inventoryHeader.closest('.tab-content').parentElement.parentElement.querySelector('a[asp-controller="Inventory"]')?.href.split('/').pop();
-            const inventoryH2 = document.querySelector('h2[data-inventory-version]');
-            inventoryIdInput.value = inventoryH2.parentElement.parentElement.parentElement.querySelector('h2').dataset.inventoryId;
-        } else {
-            inventoryIdInput.value = ''; // Not on an inventory page
-        }
+        // Robustly find inventory ID using the specific data attribute
+        const inventoryHeader = document.querySelector('h2[data-inventory-id]');
+        inventoryIdInput.value = inventoryHeader ? inventoryHeader.dataset.inventoryId : '';
     });
 
     supportTicketForm.addEventListener('submit', async function (event) {
@@ -60,13 +54,13 @@ function initializeSupportTicket() {
                 showToast('Support ticket submitted successfully. We will get back to you shortly.');
                 supportTicketModal.hide();
             } else {
-                const errorData = await response.json();
+                const errorData = await response.json().catch(() => ({ message: 'An unknown server error occurred.' }));
                 const errorMessage = errorData.message || Object.values(errorData).flat().join(' ');
                 validationErrorDiv.textContent = `Submission failed: ${errorMessage}`;
                 validationErrorDiv.classList.remove('d-none');
             }
         } catch (error) {
-            validationErrorDiv.textContent = 'A network error occurred. Please try again.';
+            validationErrorDiv.textContent = 'A network error occurred. Please check your connection and try again.';
             validationErrorDiv.classList.remove('d-none');
         } finally {
             submitButton.disabled = false;
